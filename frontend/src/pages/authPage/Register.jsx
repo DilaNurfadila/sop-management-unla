@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { register } from "../../services/authApi";
 
@@ -39,9 +39,9 @@ const Register = () => {
       if (response.error) {
         setErrorMessage(response.message);
       } else {
-        navigate("/docs");
+        navigate("/dashboard");
       }
-    } catch (error) {
+    } catch {
       setErrorMessage("Terjadi kesalahan. Silakan coba lagi.");
     } finally {
       setIsSubmitting(false);

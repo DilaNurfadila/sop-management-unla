@@ -13,7 +13,7 @@ const app = express();
 app.use(cookieParser());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000", // Ganti dengan origin frontend
+    origin: process.env.FRONTEND_URL || "http://localhost:5173", // Ganti dengan origin frontend
     credentials: true,
   })
 );
@@ -26,19 +26,6 @@ const JWT_SECRET = process.env.JWT_SECRET;
 app.use("/api/docs", docRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
-
-// Error handling for JWT
-// app.use((err, req, res, next) => {
-//   if (err.name === "UnauthorizedError") {
-//     return res.status(401).json({
-//       code: "TOKEN_REQUIRED",
-//       message: "Access token required",
-//       redirect: "/auth/login",
-//     });
-//   }
-//   console.error(err.stack);
-//   res.status(500).json({ message: "Something broke!" });
-// });
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

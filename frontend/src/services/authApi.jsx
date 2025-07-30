@@ -10,7 +10,11 @@ export const requestOtp = async (email) => {
     const response = await axios.post(`${API_URL}/request-otp`, { email });
     return response.data;
   } catch (error) {
-    // Handle error
+    return {
+      error: true,
+      status: error.response?.status,
+      message: error.response?.data?.message || "Failed to request OTP",
+    };
   }
 };
 

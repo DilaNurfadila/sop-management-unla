@@ -9,18 +9,6 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
-// Add interceptor to include token if available
-// api.interceptors.request.use(
-//   (config) => {
-//     const token = localStorage.getItem("accessToken");
-//     if (token) {
-//       config.headers.Authorization = `Bearer ${token}`;
-//     }
-//     return config;
-//   },
-//   (error) => Promise.reject(error)
-// );
-
 export const getDocs = async () => {
   try {
     const response = await api.get(`${API_URL}`);

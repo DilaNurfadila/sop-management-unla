@@ -1,8 +1,12 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { createDoc } from "../services/api";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { getDoc, updateDoc } from "../../services/api";
+import { dateFormatterDB } from "../../utils/dateFormatter";
+import { FiArrowLeft, FiEdit } from "react-icons/fi";
 
-const AddDocPage = () => {
+const EditDocPage = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     sop_code: "",
     sop_title: "",
@@ -13,7 +17,32 @@ const AddDocPage = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchDoc = async () => {
+      const response = await getDoc(id);
+      if (response.error) {
+        navigate("/docs", {
+          state: {
+            message: response.message,
+            type: "error",
+          },
+        });
+        return;
+      }
+      setFormData({
+        sop_code: response.sop_code || "",
+        sop_title: response.sop_title || "",
+        sop_value: response.sop_value || "",
+        organization: response.organization || "",
+        sop_created: response.sop_created
+          ? dateFormatterDB(response.sop_created)
+          : "",
+        sop_version: response.sop_version || "",
+      });
+    };
+    fetchDoc();
+  }, [id, navigate]);
 
   const handleChange = (e) => {
     setFormData({
@@ -35,13 +64,12 @@ const AddDocPage = () => {
       return;
     }
 
-    // Format payload
     const formattedData = {
       ...formData,
       sop_created: formData.sop_created || null,
     };
 
-    const response = await createDoc(formattedData);
+    const response = await updateDoc(id, formattedData);
     if (response.error) {
       setErrorMessage(response.message);
       setIsSubmitting(false);
@@ -50,7 +78,7 @@ const AddDocPage = () => {
 
     navigate("/docs", {
       state: {
-        message: "Dokumen SOP berhasil ditambahkan",
+        message: "Dokumen SOP berhasil diperbarui",
         type: "success",
       },
     });
@@ -59,7 +87,7 @@ const AddDocPage = () => {
 
   return (
     <div className="p-6">
-      <h2 className="text-2xl font-bold mb-6">Tambah Dokumen SOP Baru</h2>
+      <h2 className="text-2xl font-bold mb-6">Edit Dokumen SOP</h2>
       {errorMessage && (
         <div className="mb-4 text-red-600 font-semibold">{errorMessage}</div>
       )}
@@ -71,6 +99,7 @@ const AddDocPage = () => {
             name="sop_code"
             value={formData.sop_code}
             onChange={handleChange}
+            autoComplete="off"
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-md"
           />
@@ -82,6 +111,7 @@ const AddDocPage = () => {
             name="sop_title"
             value={formData.sop_title}
             onChange={handleChange}
+            autoComplete="off"
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-md"
           />
@@ -93,6 +123,7 @@ const AddDocPage = () => {
             name="organization"
             value={formData.organization}
             onChange={handleChange}
+            autoComplete="off"
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-md"
           />
@@ -116,6 +147,7 @@ const AddDocPage = () => {
             name="sop_version"
             value={formData.sop_version}
             onChange={handleChange}
+            autoComplete="off"
             className="w-full px-3 py-2 border border-gray-300 rounded-md"
           />
         </div>
@@ -128,27 +160,33 @@ const AddDocPage = () => {
             className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[100px]"
           />
         </div>
-        <div className="flex gap-5">
+        <div className="flex gap-2">
           <button
             type="submit"
             disabled={isSubmitting}
-            className={`px-4 py-2 rounded-md text-white ${
+            className={`mt-4 mb-4 w-max text-white px-4 py-2 rounded-lg flex items-center cursor-pointer ${
               isSubmitting
                 ? "bg-green-600 opacity-70"
                 : "bg-green-500 hover:bg-green-600"
             }`}>
-            {isSubmitting ? "Menyimpan..." : "Simpan"}
+            {isSubmitting ? (
+              "Memperbarui..."
+            ) : (
+              <>
+                <FiEdit className="mr-2 text-white" size={16} />
+                <span>Update</span>
+              </>
+            )}
           </button>
-          <button
-            type="button"
-            onClick={() => navigate("/docs")}
-            className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md">
-            Batal
-          </button>
+          <Link
+            to="/docs"
+            className="mt-4 mb-4 w-max bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+            <FiArrowLeft className="mr-2" /> Kembali
+          </Link>
         </div>
       </form>
     </div>
   );
 };
 
-export default AddDocPage;
+export default EditDocPage;

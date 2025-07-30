@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { getDoc } from "../services/api";
-import { dateFormatter } from "../utils/dateFormatter";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { getDoc } from "../../services/api";
+import { dateFormatter } from "../../utils/dateFormatter";
+import { FiArrowLeft } from "react-icons/fi";
 
 const EditDocPage = () => {
   const { id } = useParams();
@@ -29,7 +30,7 @@ const EditDocPage = () => {
           sop_created: dateFormatter(doc.sop_created),
           sop_version: doc.sop_version,
         });
-      } catch (error) {
+      } catch {
         navigate("/docs", {
           state: {
             message: "Gagal memuat data dokumen SOP",
@@ -74,12 +75,11 @@ const EditDocPage = () => {
         <p>{formData.sop_value}</p>
       </div>
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => navigate("/docs")}
-          className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md">
-          Kembali
-        </button>
+        <Link
+          to="/docs"
+          className="mt-4 mb-4 w-max bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+          <FiArrowLeft className="mr-2" /> Kembali
+        </Link>
       </div>
     </div>
   );

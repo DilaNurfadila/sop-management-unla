@@ -1,8 +1,21 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { getDocs, deleteDoc, publishDoc, unpublishDoc } from "../services/api";
-import Notification from "../components/Notification";
-import { dateFormatter } from "../utils/dateFormatter";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import {
+  getDocs,
+  deleteDoc,
+  publishDoc,
+  unpublishDoc,
+} from "../../services/api";
+import Notification from "../../components/Notification";
+import { dateFormatter } from "../../utils/dateFormatter";
+import {
+  FiFilePlus,
+  FiEdit,
+  FiTrash,
+  FiGlobe,
+  FiLock,
+  FiFileText,
+} from "react-icons/fi";
 
 const ListDocsPage = () => {
   const [docs, setDocs] = useState([]);
@@ -12,7 +25,7 @@ const ListDocsPage = () => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const user = JSON.parse(localStorage.getItem("user"));
+  // const currentPage = location.pathname.split("/")[1] || "dashboard";
 
   const fetchDocs = useCallback(async () => {
     try {
@@ -43,14 +56,6 @@ const ListDocsPage = () => {
     }
   }, [fetchDocs, location, navigate]);
 
-  const handleEdit = (id) => {
-    navigate(`/docs/edit/${id}`);
-  };
-
-  const handleDetail = (id) => {
-    navigate(`/docs/detail/${id}`);
-  };
-
   const handleDelete = async (id) => {
     const isConfirmed = window.confirm(
       "Apakah Anda yakin ingin menghapus dokumen SOP ini?"
@@ -60,7 +65,7 @@ const ListDocsPage = () => {
         await deleteDoc(id);
         showNotification("Dokumen SOP berhasil dihapus", "success");
         fetchDocs();
-      } catch (error) {
+      } catch {
         showNotification("Gagal menghapus dokumen SOP", "error");
       }
     }
@@ -99,6 +104,23 @@ const ListDocsPage = () => {
         );
       }
     }
+  };
+
+  const isDocComplete = (doc) => {
+    // Definisikan field-field yang wajib diisi
+    const requiredFields = [
+      "sop_code",
+      "sop_title",
+      "sop_value", // atau field lain yang diperlukan
+      "organization",
+      "sop_created",
+      "sop_version",
+    ];
+
+    return requiredFields.every((field) => {
+      const value = doc[field];
+      return value !== undefined && value !== null && value !== "";
+    });
   };
 
   const handleUnpublish = async (id) => {
@@ -162,9 +184,11 @@ const ListDocsPage = () => {
         />
       )}
 
-      <p>
-        Selamat datang, {user?.name} ({user?.role})
-      </p>
+      <Link
+        to="/docs/add"
+        className="mt-4 mb-4 w-max bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+        <FiFilePlus className="mr-2" /> Tambah Dokumen
+      </Link>
 
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse">
@@ -223,14 +247,19 @@ const ListDocsPage = () => {
                           ? handlePublish(doc.id)
                           : handleUnpublish(doc.id)
                       }
-                      disabled={loadingStates[doc.id]}
-                      className={`px-3 py-1 rounded mr-2 text-white ${
-                        loadingStates[doc.id]
-                          ? "opacity-50 cursor-not-allowed"
+                      disabled={loadingStates[doc.id] || !isDocComplete(doc)}
+                      className={`mt-4 mb-4 w-max text-white px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer ${
+                        loadingStates[doc.id] || !isDocComplete(doc)
+                          ? "opacity-50 cursor-not-allowed bg-gray-400"
                           : doc.status === "published"
                           ? "bg-yellow-500 hover:bg-yellow-600"
                           : "bg-green-500 hover:bg-green-600"
-                      }`}>
+                      }`}
+                      title={
+                        !isDocComplete(doc)
+                          ? "Lengkapi data dokumen terlebih dahulu"
+                          : ""
+                      }>
                       {loadingStates[doc.id] ? (
                         <span className="flex items-center">
                           <svg
@@ -253,25 +282,31 @@ const ListDocsPage = () => {
                           Processing...
                         </span>
                       ) : doc.status === "draft" ? (
-                        "Publish"
+                        <>
+                          <FiGlobe className="mr-2 text-white" size={16} />
+                          <span>Publish</span>
+                        </>
                       ) : (
-                        "Unpublish"
+                        <>
+                          <FiLock className="mr-2 text-white" size={16} />
+                          <span>Unpublish</span>
+                        </>
                       )}
                     </button>
-                    <button
-                      onClick={() => handleDetail(doc.id)}
-                      className="bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-1 rounded mr-2">
-                      Detail
-                    </button>
-                    <button
-                      onClick={() => handleEdit(doc.id)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded mr-2">
-                      Edit
-                    </button>
+                    <Link
+                      to={`/docs/detail/${doc.id}`}
+                      className="mt-4 mb-4 w-max bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg flex items-center">
+                      <FiFileText className="mr-2" /> Detail
+                    </Link>
+                    <Link
+                      to={`/docs/edit/${doc.id}`}
+                      className="mt-4 mb-4 w-max bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+                      <FiEdit className="mr-2" /> Edit
+                    </Link>
                     <button
                       onClick={() => handleDelete(doc.id)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded">
-                      Delete
+                      className="mt-4 mb-4 w-max bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center cursor-pointer">
+                      <FiTrash className="mr-2" /> Delete
                     </button>
                   </td>
                 </tr>

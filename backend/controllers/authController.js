@@ -1,8 +1,10 @@
 const Auth = require("../models/Auth");
 const { sendVerification } = require("../config/emailService");
 const crypto = require("crypto");
+const cryptojs = require("crypto-js");
 const jwt = require("jsonwebtoken");
 const { format } = require("date-fns");
+require("dotenv").config();
 
 const generateOtp = () => {
   return crypto.randomInt(100000, 999999).toString();
@@ -92,18 +94,15 @@ exports.verifyOtp = async (req, res) => {
     const token = generateToken(user);
     setTokenCookie(res, token);
 
-    // const data = {
-    //   email,
-    // };
+    const iv = cryptojs.lib.WordArray.random(16);
+    const key = cryptojs.enc.Hex.parse(process.env.KEY);
+    const emailEncrypted = cryptojs.AES.encrypt(user.email, key, {
+      mode: cryptojs.mode.CBC,
+      iv: iv, // IV HARUS KONSISTEN
+    }).toString();
 
-    // // Generate tokens
-    // const accessToken = jwt.sign({ data }, process.env.JWT_SECRET, {
-    //   expiresIn: "1d",
-    // });
-
-    // console.log(email);
-    // console.log(user.email);
-    // console.log(user);
+    const emailEncryptedSave =
+      iv.toString(cryptojs.enc.Hex) + ":" + emailEncrypted;
 
     await Auth.usedOtp(email); // Tandai OTP sebagai digunakan
     // Simpan refresh token di database
@@ -114,7 +113,7 @@ exports.verifyOtp = async (req, res) => {
       token, // Untuk API requests
       user: {
         id: user.id,
-        email: user.email,
+        email: emailEncryptedSave,
         name: user.name,
         role: user.role,
       },

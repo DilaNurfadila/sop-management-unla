@@ -44,6 +44,7 @@ Backend :
 - JWT_REFRESH_SECRET
 - FRONTEND_URL
 - NODE_ENV
+- KEY
 
 Frontend :
 

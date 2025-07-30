@@ -69,7 +69,7 @@ const Profile = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
                   <FiUser className="mr-2" /> Nama Lengkap
                 </label>
                 {editMode ? (
@@ -88,7 +88,7 @@ const Profile = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
                   <FiMail className="mr-2" /> Email
                 </label>
                 {editMode ? (
@@ -109,7 +109,7 @@ const Profile = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
                   <FiPhone className="mr-2" /> Nomor Telepon
                 </label>
                 {editMode ? (
@@ -128,7 +128,7 @@ const Profile = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
                   <FiMapPin className="mr-2" /> Alamat
                 </label>
                 {editMode ? (

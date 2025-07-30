@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import crypto from "crypto-js";
 import {
   FiBell,
   FiChevronDown,
@@ -14,6 +15,12 @@ const Navbar = ({ sidebarOpen }) => {
   const dropdownRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem("user"));
+  const secretKey = crypto.enc.Hex.parse(import.meta.env.VITE_SECRET_KEY);
+  const encryptedEmail = user?.email; // misalnya dari response API
+  const [ivHex, cipherText] = encryptedEmail.split(":");
+  const iv = crypto.enc.Hex.parse(ivHex);
+  const bytes = crypto.AES.decrypt(cipherText, secretKey, { iv });
+  const emailDecrypted = bytes.toString(crypto.enc.Utf8);
 
   // Handle klik di luar dropdown
   useEffect(() => {
@@ -45,9 +52,6 @@ const Navbar = ({ sidebarOpen }) => {
       }
     }
   };
-
-  // const location = useLocation();
-  // const currentPage = location.pathname.split("/")[1] || "dashboard";
 
   return (
     <header className="bg-white shadow-sm p-4 flex justify-end items-center">
@@ -83,7 +87,9 @@ const Navbar = ({ sidebarOpen }) => {
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
               <div className="px-4 py-2 border-b">
                 <p className="text-sm font-medium">{user?.name}</p>
-                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {emailDecrypted}
+                </p>
               </div>
               <Link
                 to="/profile"

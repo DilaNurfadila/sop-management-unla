@@ -24,7 +24,14 @@ This application is still under development
 
 ## How to Run
 
+1. Backend -> run `npm run dev`
+
+2. Frontend -> run `npm start`
+
+Note :
 There is an .env file that consists of :
+
+Backend :
 
 - PORT
 - DB_HOST
@@ -38,9 +45,9 @@ There is an .env file that consists of :
 - FRONTEND_URL
 - NODE_ENV
 
-1. Backend -> run `npm run dev`
+Frontend :
 
-2. Frontend -> run `npm start`
+- VITE_SECRET_KEY
 
 ## Error Possible
 
@@ -52,12 +59,14 @@ Sometimes the package version is a problem when first trying projects from the r
 
 ## Technology
 
-1. Express js => Backend
+1. [Express js](https://expressjs.com) => Backend
 
-2. React js => Frontend
+2. [React js](https://react.dev) => Frontend
 
-3. Tailwind css => Styling
+3. [Tailwind CSS V.4.1](https://tailwindcss.com) => Styling
 
-4. MySQL => Database
+4. [MySQL](https://www.mysql.com) => Database
 
-5. Nodemailer => Email service
+5. [Nodemailer](https://nodemailer.com) => Email service
+
+6. [Vite](https://vite.dev) => The build tool for the web

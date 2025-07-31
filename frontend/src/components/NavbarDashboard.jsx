@@ -15,6 +15,12 @@ const Navbar = ({ sidebarOpen }) => {
   const dropdownRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem("user"));
+
+  if (!user) {
+    console.log("User not logged in");
+    return null; // or handle the case where user data is not available
+  }
+
   const secretKey = crypto.enc.Hex.parse(import.meta.env.VITE_SECRET_KEY);
   const encryptedEmail = user?.email; // misalnya dari response API
   const [ivHex, cipherText] = encryptedEmail.split(":");

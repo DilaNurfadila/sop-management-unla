@@ -8,11 +8,13 @@ This application is still under development
 
 ## Existing Features
 
-- CRUD SOP
+- CRUD SOP (with upload PDF)
 
 - SOP Publication
 
 - Login (with email service)
+
+- Displaying SOP published on public page
 
 ## How to Install
 
@@ -45,10 +47,24 @@ Backend :
 - FRONTEND_URL
 - NODE_ENV
 - KEY
+- FIREBASE_API_KEY
+- FIREBASE_AUTH_DOMAIN
+- FIREBASE_PROJECT_ID
+- FIREBASE_STORAGE_BUCKET
+- FIREBASE_MESSAGING_SENDER_ID
+- FIREBASE_APP_ID
+- FIREBASE_MEASUREMENT_ID
 
 Frontend :
 
 - VITE_SECRET_KEY
+- VITE_FIREBASE_API_KEY
+- VITE_FIREBASE_AUTH_DOMAIN
+- VITE_FIREBASE_PROJECT_ID
+- VITE_FIREBASE_STORAGE_BUCKET
+- VITE_FIREBASE_MESSAGING_SENDER_ID
+- VITE_FIREBASE_APP_ID
+- VITE_FIREBASE_MEASUREMENT_ID
 
 ## Error Possible
 
@@ -71,3 +87,5 @@ Sometimes the package version is a problem when first trying projects from the r
 5. [Nodemailer](https://nodemailer.com) => Email service
 
 6. [Vite](https://vite.dev) => The build tool for the web
+
+7. [Firebase](https://firebase.google.com) => Storage for document

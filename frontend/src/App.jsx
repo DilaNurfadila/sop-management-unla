@@ -6,19 +6,18 @@ import {
   Navigate,
 } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
-import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import ListDocsPage from "./pages/docPages/ListDocsPage";
 import AddDocPage from "./pages/docPages/AddDocPage";
-import DetailDocPage from "./pages/docPages/DetailDocPage";
-import EditDocPage from "./pages/docPages/EditDocPage";
+import EditPdfDocPage from "./pages/docPages/EditPdfDocPage";
 import Login from "./pages/authPage/Login";
 import Register from "./pages/authPage/Register";
 import MainLayout from "./components/MainLayout";
 import Home from "./pages/Home";
 import Contact from "./pages/Contact";
 import About from "./pages/About";
+import PublishedSOPsPage from "./pages/PublishedSOPsPage";
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -38,6 +37,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/sop" element={<PublishedSOPsPage />} />
 
         {/* Protected Routes (dengan layout) */}
         <Route
@@ -74,26 +74,10 @@ function App() {
             }
           />
           <Route
-            path="/docs/detail/:id"
+            path="/docs/edit-pdf/:id"
             element={
               <PrivateRoute>
-                <DetailDocPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/docs/edit/:id"
-            element={
-              <PrivateRoute>
-                <EditDocPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/users"
-            element={
-              <PrivateRoute>
-                <Users />
+                <EditPdfDocPage />
               </PrivateRoute>
             }
           />

@@ -14,6 +14,14 @@ const Navbar = () => {
             className="cursor-pointer hover:underline"
             onClick={(e) => {
               e.preventDefault();
+              navigate("/sop");
+            }}>
+            Dokumen SOP
+          </a>
+          <a
+            className="cursor-pointer hover:underline"
+            onClick={(e) => {
+              e.preventDefault();
               navigate("/about");
             }}>
             Tentang

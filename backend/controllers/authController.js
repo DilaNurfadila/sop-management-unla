@@ -151,8 +151,6 @@ exports.register = async (req, res) => {
     //   expiresIn: "1d",
     // });
 
-    console.log(token);
-
     // Simpan user dengan refresh token
     const register = await Auth.register(email, {
       name,

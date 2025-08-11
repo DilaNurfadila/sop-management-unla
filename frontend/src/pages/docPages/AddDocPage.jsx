@@ -1,163 +1,213 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createDoc } from "../../services/api";
-import { FiArrowLeft, FiFile, FiFilePlus, FiPlus } from "react-icons/fi";
+import FileUpload from "../../components/FileUpload";
+import Notification from "../../components/Notification";
+import { FiArrowLeft, FiFilePlus, FiUpload } from "react-icons/fi";
 
 const AddDocPage = () => {
   const [formData, setFormData] = useState({
     sop_code: "",
     sop_title: "",
-    sop_value: "",
     organization: "",
-    sop_created: "",
+    sop_applicable: "",
     sop_version: "",
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-    setErrorMessage("");
+  const showNotification = (message, type) => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 5000);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setErrorMessage("");
+  const closeNotification = () => {
+    setNotification(null);
+  };
 
-    // Client-side validation
-    if (!formData.sop_code || !formData.sop_title || !formData.organization) {
-      setErrorMessage("Kode SOP, Judul SOP, dan Organisasi wajib diisi.");
-      setIsSubmitting(false);
-      return;
-    }
+  const handleChange = (e) => {
+    const { name, value } = e.target;
 
-    // Format payload
-    const formattedData = {
+    setFormData({
       ...formData,
-      sop_created: formData.sop_created || null,
-    };
-
-    const response = await createDoc(formattedData);
-    if (response.error) {
-      setErrorMessage(response.message);
-      setIsSubmitting(false);
-      return;
-    }
-
-    navigate("/docs", {
-      state: {
-        message: "Dokumen SOP berhasil ditambahkan",
-        type: "success",
-      },
+      [name]: value,
     });
-    setIsSubmitting(false);
+  };
+
+  const handleUploadSuccess = () => {
+    showNotification("File PDF berhasil diunggah", "success");
+    // Navigate to list page after successful upload
+    setTimeout(() => {
+      navigate("/docs", {
+        state: {
+          message: "Dokumen SOP berhasil ditambahkan",
+          type: "success",
+        },
+      });
+    }, 2000);
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-6">Tambah Dokumen SOP Baru</h2>
-      {errorMessage && (
-        <div className="mb-4 text-red-600 font-semibold">{errorMessage}</div>
+    <div className="min-h-screen bg-gray-100 p-6">
+      {notification && (
+        <Notification
+          message={notification.message}
+          type={notification.type}
+          onClose={closeNotification}
+        />
       )}
-      <form onSubmit={handleSubmit} className="max-w-md">
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Kode SOP:</label>
-          <input
-            type="text"
-            name="sop_code"
-            value={formData.sop_code}
-            onChange={handleChange}
-            autoComplete="off"
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
+
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <Link
+              to="/docs"
+              className="mr-4 text-blue-600 hover:text-blue-800 transition-colors">
+              <FiArrowLeft size={24} />
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+                <FiFilePlus className="mr-3" />
+                Tambah Dokumen SOP Baru
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Isi informasi dokumen dan unggah file PDF SOP
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Judul SOP:</label>
-          <input
-            type="text"
-            name="sop_title"
-            value={formData.sop_title}
-            onChange={handleChange}
-            autoComplete="off"
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
+      </div>
+
+      {/* Form */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Kode SOP */}
+            <div>
+              <label
+                htmlFor="sop_code"
+                className="block text-sm font-medium text-gray-700 mb-2">
+                Kode SOP <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="sop_code"
+                name="sop_code"
+                value={formData.sop_code}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Contoh: SOP-001"
+                required
+              />
+            </div>
+
+            {/* Versi */}
+            <div>
+              <label
+                htmlFor="sop_version"
+                className="block text-sm font-medium text-gray-700 mb-2">
+                Versi
+              </label>
+              <input
+                type="text"
+                id="sop_version"
+                name="sop_version"
+                value={formData.sop_version}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Contoh: 1.0"
+              />
+            </div>
+          </div>
+
+          {/* Judul SOP */}
+          <div>
+            <label
+              htmlFor="sop_title"
+              className="block text-sm font-medium text-gray-700 mb-2">
+              Judul SOP <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="sop_title"
+              name="sop_title"
+              value={formData.sop_title}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Contoh: Prosedur Keamanan Sistem"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Organisasi */}
+            <div>
+              <label
+                htmlFor="organization"
+                className="block text-sm font-medium text-gray-700 mb-2">
+                Organisasi
+              </label>
+              <input
+                type="text"
+                id="organization"
+                name="organization"
+                value={formData.organization}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Contoh: Universitas Langlangbuana"
+              />
+            </div>
+
+            {/* Tanggal Berlaku */}
+            <div>
+              <label
+                htmlFor="sop_applicable"
+                className="block text-sm font-medium text-gray-700 mb-2">
+                Tanggal Berlaku <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                id="sop_applicable"
+                name="sop_applicable"
+                value={formData.sop_applicable}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+          </div>
+
+          {/* File Upload */}
+          <div>
+            <label
+              htmlFor="file"
+              className="block text-sm font-medium text-gray-700 mb-2">
+              Upload File PDF SOP <span className="text-red-500">*</span>
+            </label>
+            <div className="mt-1">
+              <FileUpload
+                metadata={formData}
+                onUploadSuccess={handleUploadSuccess}
+                showNotification={showNotification}
+              />
+            </div>
+            <p className="mt-2 text-sm text-gray-500">
+              <strong>Catatan:</strong> Pastikan file PDF sudah berisi informasi
+              lengkap sesuai dengan metadata yang diisi.
+            </p>
+          </div>
+
+          {/* Submit Buttons */}
+          <div className="flex space-x-4 pt-6">
+            <Link
+              to="/docs"
+              className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-6 rounded-lg transition-colors inline-flex items-center">
+              <FiArrowLeft className="mr-2" />
+              Kembali ke Daftar
+            </Link>
+          </div>
         </div>
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Organisasi:</label>
-          <input
-            type="text"
-            name="organization"
-            value={formData.organization}
-            onChange={handleChange}
-            autoComplete="off"
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">
-            Tanggal Pembuatan SOP:
-          </label>
-          <input
-            type="date"
-            name="sop_created"
-            value={formData.sop_created}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Versi SOP:</label>
-          <input
-            type="text"
-            name="sop_version"
-            value={formData.sop_version}
-            onChange={handleChange}
-            autoComplete="off"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Isi SOP:</label>
-          <textarea
-            name="sop_value"
-            value={formData.sop_value}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-[100px]"
-          />
-        </div>
-        <div className="flex gap-5">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`mt-4 mb-4 w-max text-white px-4 py-2 rounded-lg flex items-center cursor-pointer ${
-              isSubmitting
-                ? "bg-green-600 opacity-70"
-                : "bg-green-500 hover:bg-green-600"
-            }`}>
-            {isSubmitting ? (
-              "Menyimpan..."
-            ) : (
-              <>
-                <FiFilePlus className="mr-2 text-white" size={16} />
-                <span>Simpan</span>
-              </>
-            )}
-          </button>
-          <Link
-            to="/docs"
-            className="mt-4 mb-4 w-max bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
-            <FiArrowLeft className="mr-2" /> Kembali
-          </Link>
-        </div>
-      </form>
+      </div>
     </div>
   );
 };

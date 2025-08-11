@@ -13,20 +13,7 @@ import { logout } from "../services/authApi";
 const Navbar = ({ sidebarOpen }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
-
-  const user = JSON.parse(localStorage.getItem("user"));
-
-  if (!user) {
-    console.log("User not logged in");
-    return null; // or handle the case where user data is not available
-  }
-
-  const secretKey = crypto.enc.Hex.parse(import.meta.env.VITE_SECRET_KEY);
-  const encryptedEmail = user?.email; // misalnya dari response API
-  const [ivHex, cipherText] = encryptedEmail.split(":");
-  const iv = crypto.enc.Hex.parse(ivHex);
-  const bytes = crypto.AES.decrypt(cipherText, secretKey, { iv });
-  const emailDecrypted = bytes.toString(crypto.enc.Utf8);
+  const navigate = useNavigate();
 
   // Handle klik di luar dropdown
   useEffect(() => {
@@ -42,8 +29,18 @@ const Navbar = ({ sidebarOpen }) => {
     };
   }, []);
 
-  const navigate = useNavigate();
-  // const user = JSON.parse(localStorage.getItem("user"));
+  const user = JSON.parse(localStorage.getItem("user"));
+
+  if (!user) {
+    return null; // or handle the case where user data is not available
+  }
+
+  const secretKey = crypto.enc.Hex.parse(import.meta.env.VITE_SECRET_KEY);
+  const encryptedEmail = user?.email; // misalnya dari response API
+  const [ivHex, cipherText] = encryptedEmail.split(":");
+  const iv = crypto.enc.Hex.parse(ivHex);
+  const bytes = crypto.AES.decrypt(cipherText, secretKey, { iv });
+  const emailDecrypted = bytes.toString(crypto.enc.Utf8);
 
   const handleLogout = async () => {
     const isConfirmed = window.confirm("Apakah Anda yakin ingin keluar?");
@@ -53,7 +50,6 @@ const Navbar = ({ sidebarOpen }) => {
         localStorage.removeItem("user");
         navigate("/auth/login");
       } catch (err) {
-        console.log(err.message);
         console.error("Logout error:", err);
       }
     }

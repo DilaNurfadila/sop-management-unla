@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const { expressjwt } = require("express-jwt"); // Updated import
 const docRoutes = require("./routes/docRoutes");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -18,9 +17,6 @@ app.use(
   })
 );
 app.use(express.json());
-
-// JWT Secret (should be in .env)
-const JWT_SECRET = process.env.JWT_SECRET;
 
 // Protected routes
 app.use("/api/docs", docRoutes);

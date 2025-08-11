@@ -23,7 +23,7 @@ const Home = () => {
         </section>
 
         {/* SOP */}
-        <section id="sop" className="bg-white rounded-xl shadow-md p-6">
+        <section id="sop" className="bg-white rounded-xl shadow-md p-6 mb-8">
           <h2 className="text-2xl font-bold mb-4 text-blue-900">
             Standar Operasional Prosedur (SOP)
           </h2>

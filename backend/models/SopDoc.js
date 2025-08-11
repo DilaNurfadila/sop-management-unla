@@ -6,6 +6,13 @@ class SopDoc {
     return rows;
   }
 
+  static async findPublishedSopDocs() {
+    const [rows] = await pool.query(
+      "SELECT * FROM sop_documents WHERE status = 'published' ORDER BY sop_code ASC"
+    );
+    return rows;
+  }
+
   static async findById(id) {
     const [rows] = await pool.query(
       "SELECT * FROM sop_documents WHERE id = ?",
@@ -29,10 +36,10 @@ class SopDoc {
     const {
       sop_code,
       sop_title,
-      sop_value,
+      url,
       status = "draft",
       organization,
-      sop_created,
+      sop_applicable,
       sop_version,
     } = sopData;
 
@@ -42,21 +49,26 @@ class SopDoc {
       throw new Error("Kode SOP sudah digunakan oleh dokumen lain");
     }
 
+    // Ensure sop_applicable has a valid date value
+    const validApplicableDate =
+      sop_applicable || new Date().toISOString().split("T")[0];
+
     const [result] = await pool.query(
-      "INSERT INTO sop_documents (sop_code, sop_title, sop_value, status, organization, sop_created, sop_version) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO sop_documents (sop_code, sop_title, url, status, organization, sop_applicable, sop_version) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
         sop_code,
         sop_title,
-        sop_value,
+        url,
         status,
         organization,
-        sop_created,
+        validApplicableDate,
         sop_version,
       ]
     );
 
     if (result.affectedRows === 1) {
       return {
+        id: result.insertId,
         sop_code: sop_code,
         ...sopData,
         success: true,
@@ -70,9 +82,9 @@ class SopDoc {
     const {
       sop_code,
       sop_title,
-      sop_value,
+      url,
       organization,
-      sop_created,
+      sop_applicable,
       sop_version,
     } = sopData;
 
@@ -83,16 +95,8 @@ class SopDoc {
     }
 
     await pool.query(
-      "UPDATE sop_documents SET sop_code = ?, sop_title = ?, sop_value = ?, organization = ?, sop_created = ?, sop_version = ? WHERE id = ?",
-      [
-        sop_code,
-        sop_title,
-        sop_value,
-        organization,
-        sop_created,
-        sop_version,
-        id,
-      ]
+      "UPDATE sop_documents SET sop_code = ?, sop_title = ?, url = ?, organization = ?, sop_applicable = ?, sop_version = ? WHERE id = ?",
+      [sop_code, sop_title, url, organization, sop_applicable, sop_version, id]
     );
     return { id, ...sopData };
   }

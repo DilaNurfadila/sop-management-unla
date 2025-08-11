@@ -75,7 +75,6 @@ const Login = () => {
 
       try {
         const response = await verifyOtp(formData.email, formData.access_code);
-        console.log(response.user);
         if (response.error) {
           const accessCodeErrors = [
             "OTP record not found or expired. please request again",
@@ -104,12 +103,8 @@ const Login = () => {
           const users = await getUsers();
           const foundUser = users.find((user) => formData.email === user.email);
 
-          console.log(foundUser);
-
           if (foundUser) {
             const user = await getUserByEmail(formData.email);
-            console.log(user);
-            console.log(!user.name);
             if (user && !user.name) {
               return navigate("/auth/register", {
                 state: {
@@ -132,9 +127,9 @@ const Login = () => {
         }
       } catch (error) {
         setErrorMessage(
-          "Terjadi kesalahan saat verifikasi. Silakan coba lagi."
+          "Terjadi kesalahan saat verifikasi. Silakan coba lagi.",
+          error
         );
-        console.log(error.message);
       } finally {
         setIsVerifying(false);
       }

@@ -10,14 +10,16 @@ const {
   deleteObject,
 } = require("firebase/storage");
 
+require("dotenv").config();
+
 const firebaseConfig = {
-  apiKey: "AIzaSyBK5vWAnlnxyEGPc1VPyH5zH3KYdzwr-8Q",
-  authDomain: "sop-management-7280d.firebaseapp.com",
-  projectId: "sop-management-7280d",
-  storageBucket: "sop-management-7280d.firebasestorage.app",
-  messagingSenderId: "270235719217",
-  appId: "1:270235719217:web:73f0313f2404b6cc2ee710",
-  measurementId: "G-RQ8Z6G5NKD",
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID,
 };
 
 // Initialize Firebase

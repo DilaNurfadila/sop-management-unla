@@ -30,9 +30,7 @@ This application is still under development
 
 ## How to Run
 
-1. Backend -> run `npm run dev`
-
-2. Frontend -> run `npm start`
+Backend & frontend -> run `npm run dev`
 
 Note :
 There is an .env file that consists of :

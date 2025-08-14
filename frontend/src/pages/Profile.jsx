@@ -1,5 +1,8 @@
+// Import React hooks untuk state management
 import { useState } from "react";
+// Import crypto-js untuk dekripsi email
 import crypto from "crypto-js";
+// Import icon dari react-icons untuk UI profile
 import {
   FiUser,
   FiMail,
@@ -10,16 +13,29 @@ import {
   FiSave,
 } from "react-icons/fi";
 
+/**
+ * Komponen Profile - Halaman profil user dengan edit functionality
+ * Menampilkan informasi user dan memungkinkan editing data
+ */
 const Profile = () => {
+  // Ambil data user dari localStorage
   const user = JSON.parse(localStorage.getItem("user"));
+
+  // Setup untuk dekripsi email yang ter-encrypt
   const secretKey = crypto.enc.Hex.parse(import.meta.env.VITE_SECRET_KEY);
-  const encryptedEmail = user?.email; // misalnya dari response API
+  const encryptedEmail = user?.email; // Email terenkripsi dari API response
+  // Split IV dan cipher text dari encrypted email
   const [ivHex, cipherText] = encryptedEmail.split(":");
+  // Parse IV dari hex string
   const iv = crypto.enc.Hex.parse(ivHex);
+  // Decrypt email menggunakan AES
   const bytes = crypto.AES.decrypt(cipherText, secretKey, { iv });
+  // Convert bytes hasil dekripsi ke string UTF-8
   const emailDecrypted = bytes.toString(crypto.enc.Utf8);
 
+  // State untuk mode edit profile
   const [editMode, setEditMode] = useState(false);
+  // State untuk form data dengan data default dari user
   const [formData, setFormData] = useState({
     name: user?.name || "Unknown User",
     email: emailDecrypted || "Unknown Email",
@@ -27,28 +43,47 @@ const Profile = () => {
     position: user?.position || "Unknown Position",
   });
 
+  /**
+   * Handle perubahan input form
+   * @param {Event} e - Event dari input field
+   */
   const handleChange = (e) => {
     const { name, value } = e.target;
+    // Update form data dengan spread operator
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  /**
+   * Handle submit form profile
+   * @param {Event} e - Event dari form submit
+   */
   const handleSubmit = (e) => {
-    e.preventDefault();
-    setEditMode(false);
-    // Tambahkan logika penyimpanan ke API di sini
+    e.preventDefault(); // Prevent default form submission
+    setEditMode(false); // Keluar dari edit mode
+    // TODO: Tambahkan logika penyimpanan ke API di sini
   };
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      {/* Page title */}
       <h1 className="text-2xl font-bold mb-6">Profil Saya</h1>
 
+      {/* Card container untuk profile */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {/* Header Profil */}
+        {/* Header Profil dengan background biru */}
         <div className="bg-blue-600 p-6 text-white">
           <div className="flex flex-col md:flex-row items-center">
+            {/* Avatar section dengan relative positioning untuk edit button */}
             <div className="relative mb-4 md:mb-0">
+              {/* Avatar circle dengan inisial user */}
               <div className="w-24 h-24 rounded-full bg-blue-400 flex items-center justify-center text-3xl font-bold">
-                JD
+                {user?.name
+                  ? user.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .toUpperCase()
+                  : "JD"}
               </div>
               {editMode && (
                 <button className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow-md text-blue-600 hover:bg-gray-100">

@@ -1,11 +1,16 @@
+// Import React dan hooks untuk state management dan lifecycle
 import React, { useState, useEffect, useCallback } from "react";
+// Import React Router hooks untuk navigasi dan location
 import { useNavigate, useLocation, Link } from "react-router-dom";
+// Import API services untuk operasi dokumen PDF
 import {
   getUploadedFiles,
   deleteUploadedFile,
   updateDocPdfStatus,
 } from "../../services/apiPdf";
+// Import komponen Notification
 import Notification from "../../components/Notification";
+// Import icon dari react-icons
 import {
   FiUpload,
   FiCheck,
@@ -16,21 +21,41 @@ import {
   FiFilePlus,
 } from "react-icons/fi";
 
+/**
+ * Komponen ListDocsPage - Halaman untuk menampilkan daftar dokumen SOP
+ * Menampilkan tabel dokumen dengan fitur view, edit, delete, dan publish
+ */
 const ListDocsPage = () => {
+  // State untuk daftar file PDF
   const [pdfFiles, setPdfFiles] = useState([]);
+  // State untuk notification message
   const [notification, setNotification] = useState(null);
+  // State untuk loading individual actions (publish/unpublish)
   const [loadingStates, setLoadingStates] = useState({});
+  // State untuk loading utama saat fetch data
   const [loading, setLoading] = useState(true);
+  // State untuk error message
   const [error, setError] = useState(null);
+  // State untuk ID dokumen yang sedang dihapus
   const [deletingId, setDeletingId] = useState(null);
+
+  // Hooks untuk navigasi dan location
   const navigate = useNavigate();
   const location = useLocation();
 
+  /**
+   * Function untuk fetch daftar file PDF dari server
+   * Menggunakan useCallback untuk optimasi re-render
+   */
   const fetchPdfFiles = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
+
+      // Panggil API untuk mendapatkan daftar file
       const filesData = await getUploadedFiles();
+
+      // Validasi apakah response berupa array
       if (Array.isArray(filesData)) {
         setPdfFiles(filesData);
       } else {

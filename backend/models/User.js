@@ -1,23 +1,47 @@
+// Import koneksi database dari config
 const pool = require("../config/db");
 
+/**
+ * Model User untuk operasi database tabel users
+ * Menangani CRUD operations untuk data user
+ */
 class User {
+  /**
+   * Function untuk mengambil semua data user
+   * @returns {Promise<Array>} - Array berisi semua user
+   */
   static async findAllUsers() {
+    // Query untuk select semua user dari tabel users
     const [rows] = await pool.query("SELECT * FROM users");
     return rows;
   }
 
+  /**
+   * Function untuk mencari user berdasarkan ID
+   * @param {number} id - ID user yang dicari
+   * @returns {Promise<Object|undefined>} - Object user atau undefined jika tidak ditemukan
+   */
   static async findById(id) {
+    // Query untuk select user berdasarkan ID dengan prepared statement
     const [rows] = await pool.query("SELECT * FROM users WHERE id = ?", [id]);
-    return rows[0];
+    return rows[0]; // Return first result atau undefined jika tidak ada
   }
 
+  /**
+   * Function untuk mencari user berdasarkan email
+   * @param {string} email - Email user yang dicari
+   * @returns {Promise<Object|undefined>} - Object user atau undefined jika tidak ditemukan
+   */
   static async findByEmail(email) {
+    // Query untuk select user berdasarkan email dengan prepared statement
     const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
       email,
     ]);
-    return rows[0];
+    return rows[0]; // Return first result atau undefined jika tidak ada
   }
 
+  // Catatan: Function create di-comment karena tidak digunakan saat ini
+  // Function ini adalah template untuk membuat user baru jika diperlukan
   // static async create(sopData) {
   //   const { name, email, role } = sopData;
 

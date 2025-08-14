@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getDocPdf, updateFile } from "../../services/apiPdf";
 import Notification from "../../components/Notification";
+import ArchiveReasonModal from "../../components/ArchiveReasonModal";
 import { dateFormatterDB } from "../../utils/dateFormatter";
 import { FiArrowLeft, FiEdit, FiUpload, FiFile } from "react-icons/fi";
 
@@ -20,6 +21,8 @@ const EditPdfDocPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showArchiveReasonModal, setShowArchiveReasonModal] = useState(false);
+  const [pendingSubmission, setPendingSubmission] = useState(null);
 
   useEffect(() => {
     const fetchDoc = async () => {
@@ -101,18 +104,33 @@ const EditPdfDocPage = () => {
       return;
     }
 
+    // Prepare submission data
+    const submissionData = {
+      code: formData.sop_code.trim(),
+      title: formData.sop_title.trim(),
+      organization: formData.organization.trim(),
+      effective_date: formData.sop_applicable,
+      version: formData.sop_version.trim(),
+    };
+
+    // If there's a new file, show archive reason modal
+    if (selectedFile) {
+      setPendingSubmission(submissionData);
+      setShowArchiveReasonModal(true);
+      return;
+    }
+
+    // If no new file, proceed directly
+    await executeSubmission(submissionData, null);
+  };
+
+  const executeSubmission = async (metadata, archiveReason) => {
     setIsSubmitting(true);
 
     try {
-      const metadata = {
-        code: formData.sop_code.trim(),
-        title: formData.sop_title.trim(),
-        organization: formData.organization.trim(),
-        sop_applicable: formData.sop_applicable,
-        version: formData.sop_version.trim(),
-      };
+      console.log("Executing submission with archive reason:", archiveReason);
 
-      await updateFile(id, selectedFile, metadata);
+      await updateFile(id, selectedFile, metadata, archiveReason);
 
       setNotification({
         message: selectedFile
@@ -140,7 +158,20 @@ const EditPdfDocPage = () => {
       });
     } finally {
       setIsSubmitting(false);
+      setShowArchiveReasonModal(false);
+      setPendingSubmission(null);
     }
+  };
+
+  const handleArchiveReasonConfirm = (reason) => {
+    if (pendingSubmission) {
+      executeSubmission(pendingSubmission, reason);
+    }
+  };
+
+  const handleArchiveReasonCancel = () => {
+    setShowArchiveReasonModal(false);
+    setPendingSubmission(null);
   };
 
   const closeNotification = () => {
@@ -368,6 +399,13 @@ const EditPdfDocPage = () => {
           </div>
         </form>
       </div>
+
+      {/* Archive Reason Modal */}
+      <ArchiveReasonModal
+        isOpen={showArchiveReasonModal}
+        onConfirm={handleArchiveReasonConfirm}
+        onCancel={handleArchiveReasonCancel}
+      />
     </div>
   );
 };

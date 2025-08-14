@@ -1,18 +1,30 @@
+// Import icon dari react-icons untuk UI settings
 import { FiSave, FiLock, FiUser, FiMail, FiBell } from "react-icons/fi";
 
+/**
+ * Komponen Settings - Halaman pengaturan akun user
+ * Menampilkan form untuk edit profile, security, dan notifikasi
+ */
 const Settings = () => {
   return (
     <div className="p-6">
+      {/* Page title */}
       <h1 className="text-2xl font-bold mb-6">Pengaturan Akun</h1>
 
+      {/* Section Informasi Profil */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+        {/* Header section */}
         <div className="p-6 border-b">
           <h2 className="text-lg font-medium flex items-center">
             <FiUser className="mr-2 text-blue-600" /> Informasi Profil
           </h2>
         </div>
+
+        {/* Content section */}
         <div className="p-6">
+          {/* Grid layout untuk form fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Input Nama Lengkap */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Nama Lengkap
@@ -23,6 +35,8 @@ const Settings = () => {
                 className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+
+            {/* Input Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Email
@@ -37,13 +51,18 @@ const Settings = () => {
         </div>
       </div>
 
+      {/* Section Keamanan */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+        {/* Header section */}
         <div className="p-6 border-b">
           <h2 className="text-lg font-medium flex items-center">
             <FiLock className="mr-2 text-blue-600" /> Keamanan
           </h2>
         </div>
+
+        {/* Content section */}
         <div className="p-6">
+          {/* Input Password Saat Ini */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Password Saat Ini

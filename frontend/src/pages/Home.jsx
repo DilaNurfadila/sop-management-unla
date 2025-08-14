@@ -1,11 +1,19 @@
+// Import komponen Navbar untuk navigasi
 import Navbar from "../components/Navbar";
 
+/**
+ * Komponen Home - Halaman utama/landing page aplikasi SOP UNLA
+ * Menampilkan informasi tentang universitas dan penjelasan SOP
+ */
 const Home = () => {
   return (
     <>
+      {/* Navbar untuk navigasi utama */}
       <Navbar />
+
+      {/* Main content dengan background gray */}
       <main className="p-6 bg-gray-100 min-h-screen">
-        {/* Tentang Kampus */}
+        {/* Section Tentang Kampus */}
         <section
           id="tentang"
           className="bg-white rounded-xl shadow-md p-6 mb-8">
@@ -22,7 +30,7 @@ const Home = () => {
           </p>
         </section>
 
-        {/* SOP */}
+        {/* Section SOP - Menjelaskan tentang Standar Operasional Prosedur */}
         <section id="sop" className="bg-white rounded-xl shadow-md p-6 mb-8">
           <h2 className="text-2xl font-bold mb-4 text-blue-900">
             Standar Operasional Prosedur (SOP)

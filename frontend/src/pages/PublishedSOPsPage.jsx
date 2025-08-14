@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Navbar from "../components/Navbar";
+import FeedbackModal from "../components/FeedbackModal";
 import { getPublishedDocs } from "../services/publicApi";
 import {
   FiSearch,
@@ -9,6 +10,8 @@ import {
   FiTag,
   FiFilter,
   FiX,
+  FiMessageCircle,
+  FiStar,
 } from "react-icons/fi";
 
 const PublishedSOPsPage = () => {
@@ -19,6 +22,10 @@ const PublishedSOPsPage = () => {
   const [selectedOrganization, setSelectedOrganization] = useState("");
   const [sortBy, setSortBy] = useState("sop_code");
   const [sortOrder, setSortOrder] = useState("asc");
+  const [feedbackModal, setFeedbackModal] = useState({
+    isOpen: false,
+    selectedSop: null
+  });
 
   useEffect(() => {
     fetchPublishedSops();
@@ -108,6 +115,20 @@ const PublishedSOPsPage = () => {
 
   const handleDownload = (url) => {
     window.open(url, "_blank");
+  };
+
+  const handleOpenFeedback = (sop) => {
+    setFeedbackModal({
+      isOpen: true,
+      selectedSop: sop
+    });
+  };
+
+  const handleCloseFeedback = () => {
+    setFeedbackModal({
+      isOpen: false,
+      selectedSop: null
+    });
   };
 
   const clearFilters = () => {
@@ -312,21 +333,37 @@ const PublishedSOPsPage = () => {
                     )}
                   </div>
 
-                  {/* Action Button */}
-                  {sop.url && (
+                  {/* Action Buttons */}
+                  <div className="space-y-3">
+                    {sop.url && (
+                      <button
+                        onClick={() => handleDownload(sop.url)}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+                        <FiExternalLink className="mr-2 h-4 w-4" />
+                        Lihat Dokumen
+                      </button>
+                    )}
+                    
                     <button
-                      onClick={() => handleDownload(sop.url)}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
-                      <FiExternalLink className="mr-2 h-4 w-4" />
-                      Lihat Dokumen
+                      onClick={() => handleOpenFeedback(sop)}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+                      <FiMessageCircle className="mr-2 h-4 w-4" />
+                      Berikan Feedback
                     </button>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
       </main>
+      
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={feedbackModal.isOpen}
+        onClose={handleCloseFeedback}
+        sop={feedbackModal.selectedSop}
+      />
     </>
   );
 };

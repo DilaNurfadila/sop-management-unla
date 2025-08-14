@@ -1,49 +1,80 @@
+// Import React hooks untuk state management dan lifecycle
 import { useState, useEffect } from "react";
+// Import React Router hooks untuk navigasi dan location
 import { useNavigate, useLocation } from "react-router-dom";
+// Import API services untuk authentication
 import { requestOtp, verifyOtp } from "../../services/authApi";
 import { getUsers, getUserByEmail } from "../../services/userApi";
+// Import komponen Navbar
 import Navbar from "../../components/Navbar";
 
+/**
+ * Komponen Login untuk authentication user menggunakan OTP
+ * Proses: Input Email → Request OTP → Verify OTP → Login Success
+ */
 const Login = () => {
+  // State untuk data form (email dan OTP)
   const [formData, setFormData] = useState({
     email: "",
     access_code: "",
   });
+
+  // State untuk loading saat submit email
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false); // New state for verification
+  // State untuk loading saat verifikasi OTP
+  const [isVerifying, setIsVerifying] = useState(false);
+  // State untuk error message
   const [errorMessage, setErrorMessage] = useState("");
+  // State untuk tracking apakah OTP sudah dikirim
   const [isOtpSent, setIsOtpSent] = useState(false);
+
+  // Hooks untuk navigasi dan current location
   const navigate = useNavigate();
   const location = useLocation();
 
+  // useEffect untuk cek apakah user sudah login
   useEffect(() => {
-    // Cek jika sudah login
+    // Cek token di localStorage
     const token = localStorage.getItem("token");
     if (token) {
+      // Jika sudah login, redirect ke halaman sebelumnya atau home
       navigate(location.state?.from || "/", { replace: true });
     }
   }, [navigate, location]);
 
+  /**
+   * Handler untuk perubahan input form
+   * @param {Event} e - Event dari input field
+   */
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
     });
+    // Clear error message saat user mengetik
     setErrorMessage("");
   };
 
+  /**
+   * Handler untuk submit form (email atau OTP)
+   * @param {Event} e - Event dari form submit
+   */
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!isOtpSent) {
+      // Phase 1: Request OTP ke email
       setIsSubmitting(true);
       setErrorMessage("");
 
+      // Validasi email wajib diisi
       if (!formData.email) {
         setErrorMessage("Email wajib diisi.");
         setIsSubmitting(false);
         return;
       }
 
+      // Validasi format email
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
         setErrorMessage("Silakan masukkan alamat email yang valid.");
         setIsSubmitting(false);

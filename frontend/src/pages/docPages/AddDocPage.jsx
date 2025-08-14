@@ -1,41 +1,73 @@
+// Import React dan hooks untuk state management
 import React, { useState } from "react";
+// Import React Router untuk navigasi
 import { Link, useNavigate } from "react-router-dom";
+// Import komponen FileUpload untuk upload PDF
 import FileUpload from "../../components/FileUpload";
+// Import komponen Notification untuk feedback user
 import Notification from "../../components/Notification";
+// Import icon dari react-icons
 import { FiArrowLeft, FiFilePlus, FiUpload } from "react-icons/fi";
 
+/**
+ * Komponen AddDocPage - Halaman untuk menambahkan dokumen SOP baru
+ * Menampilkan form metadata dan komponen upload file
+ */
 const AddDocPage = () => {
+  // State untuk data form metadata dokumen
   const [formData, setFormData] = useState({
-    sop_code: "",
-    sop_title: "",
-    organization: "",
-    sop_applicable: "",
-    sop_version: "",
+    sop_code: "", // Kode SOP
+    sop_title: "", // Judul SOP
+    organization: "", // Organisasi/Divisi
+    sop_applicable: "", // Tanggal berlaku
+    sop_version: "", // Versi SOP
   });
+
+  // State untuk notification message
   const [notification, setNotification] = useState(null);
+
+  // Hook untuk navigasi programmatic
   const navigate = useNavigate();
 
+  /**
+   * Function untuk menampilkan notification
+   * @param {string} message - Pesan notification
+   * @param {string} type - Tipe notification (success, error, warning, info)
+   */
   const showNotification = (message, type) => {
     setNotification({ message, type });
+    // Auto hide notification setelah 5 detik
     setTimeout(() => setNotification(null), 5000);
   };
 
+  /**
+   * Function untuk menutup notification secara manual
+   */
   const closeNotification = () => {
     setNotification(null);
   };
 
+  /**
+   * Handler untuk perubahan input form
+   * @param {Event} e - Event dari input field
+   */
   const handleChange = (e) => {
     const { name, value } = e.target;
 
+    // Update form data dengan spread operator
     setFormData({
       ...formData,
       [name]: value,
     });
   };
 
+  /**
+   * Handler untuk upload file berhasil
+   * Menampilkan notification sukses dan navigate ke halaman list
+   */
   const handleUploadSuccess = () => {
     showNotification("File PDF berhasil diunggah", "success");
-    // Navigate to list page after successful upload
+    // Navigate ke list page setelah upload berhasil dengan delay
     setTimeout(() => {
       navigate("/docs", {
         state: {
@@ -48,6 +80,7 @@ const AddDocPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
+      {/* Background dengan min height full screen */}
       {notification && (
         <Notification
           message={notification.message}

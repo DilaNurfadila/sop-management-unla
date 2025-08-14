@@ -1,45 +1,69 @@
+// Import React hooks untuk state management
 import { useState } from "react";
+// Import API service untuk upload file
 import { uploadFile } from "../services/apiPdf";
+// Import icons untuk UI
 import { FiUpload, FiFile } from "react-icons/fi";
 
+/**
+ * Komponen FileUpload untuk mengupload dokumen PDF SOP
+ * @param {Object} metadata - Metadata dokumen (code, title, organization, dll)
+ * @param {Function} onUploadSuccess - Callback function saat upload berhasil
+ * @param {Function} showNotification - Function untuk menampilkan notification
+ */
 const FileUpload = ({ metadata, onUploadSuccess, showNotification }) => {
+  // State untuk file yang dipilih
   const [file, setFile] = useState(null);
+  // State untuk loading saat upload
   const [isUploading, setIsUploading] = useState(false);
+  // State untuk error message
   const [error, setError] = useState(null);
 
+  /**
+   * Handler untuk perubahan file input
+   * Melakukan validasi file type dan size
+   * @param {Event} e - Event dari file input
+   */
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     setError(null);
 
     if (selectedFile) {
-      // Validasi type file PDF
+      // Validasi type file - hanya PDF yang diperbolehkan
       if (selectedFile.type !== "application/pdf") {
         setError("Hanya file PDF yang diperbolehkan");
-        e.target.value = ""; // Reset input
+        e.target.value = ""; // Reset input untuk clear selection
         setFile(null);
         return;
       }
 
-      // Validasi ukuran file (maksimal 10MB)
+      // Validasi ukuran file - maksimal 10MB
       if (selectedFile.size > 10 * 1024 * 1024) {
         setError("Ukuran file harus kurang dari 10MB");
-        e.target.value = ""; // Reset input
+        e.target.value = ""; // Reset input untuk clear selection
         setFile(null);
         return;
       }
 
+      // File valid, simpan ke state
       setFile(selectedFile);
     } else {
       setFile(null);
     }
   };
 
+  /**
+   * Handler untuk submit upload file
+   * Melakukan validasi metadata dan upload file ke server
+   */
   const handleSubmit = async () => {
+    // Validasi apakah file sudah dipilih
     if (!file) {
       setError("Silakan pilih file");
       return;
     }
 
+    // Validasi metadata yang required
     if (!metadata?.sop_code || !metadata?.sop_title) {
       setError("Kode SOP dan Judul harus diisi");
       return;

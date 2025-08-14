@@ -16,6 +16,10 @@ This application is still under development
 
 - Displaying SOP published on public page
 
+- SOP Feedback
+
+- SOP Archive
+
 ## How to Install
 
 1. Clone this repository

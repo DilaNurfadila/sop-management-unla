@@ -1,14 +1,38 @@
 const pool = require("../config/db");
 
+/**
+ * Model Feedback untuk operasi database tabel sop_feedback
+ * Menangani CRUD operations untuk feedback dokumen SOP
+ */
 class Feedback {
+  /**
+   * Constructor untuk membuat instance Feedback
+   * @param {number} sopId - ID dokumen SOP yang diberi feedback
+   * @param {string} userName - Nama pengguna yang memberikan feedback
+   * @param {string} userEmail - Email pengguna yang memberikan feedback
+   * @param {number} rating - Rating dokumen (1-5)
+   * @param {string} comment - Komentar/ulasan dari pengguna
+   */
+  constructor(sopId, userName, userEmail, rating, comment) {
+    // Menyimpan ID dokumen SOP yang diberi feedback
+    this.sop_id = sopId;
+    // Menyimpan nama pengguna yang memberikan feedback
+    this.user_name = userName;
+    // Menyimpan email pengguna untuk identifikasi
+    this.user_email = userEmail;
+    // Menyimpan rating dokumen (1-5 bintang)
+    this.rating = rating;
+    // Menyimpan komentar/ulasan dari pengguna
+    this.comment = comment;
+  }
+
+  /**
+   * Method static untuk membuat feedback baru
+   * @param {Object} feedbackData - Data feedback yang akan disimpan
+   * @returns {Promise<Object>} - Object feedback yang berhasil dibuat
+   */
   static async create(feedbackData) {
-    const {
-      sop_id,
-      user_name,
-      user_email,
-      rating,
-      comment
-    } = feedbackData;
+    const { sop_id, user_name, user_email, rating, comment } = feedbackData;
 
     const [result] = await pool.query(
       "INSERT INTO sop_feedback (sop_id, user_name, user_email, rating, comment, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
@@ -62,7 +86,7 @@ class Feedback {
 
   static async updateFeedback(id, feedbackData) {
     const { rating, comment } = feedbackData;
-    
+
     await pool.query(
       "UPDATE sop_feedback SET rating = ?, comment = ?, updated_at = NOW() WHERE id = ?",
       [rating, comment, id]

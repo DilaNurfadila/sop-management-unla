@@ -1,7 +1,5 @@
 // Import React hooks untuk state management dan lifecycle
 import { useState, useRef, useEffect } from "react";
-// Import crypto-js untuk dekripsi email
-import crypto from "crypto-js";
 // Import icon dari react-icons untuk UI navbar
 import {
   FiBell,
@@ -11,9 +9,10 @@ import {
   FiLogOut,
 } from "react-icons/fi";
 // Import komponen navigasi dari React Router
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 // Import service API untuk logout
-import { logout } from "../services/authApi";
+import { forceLogout } from "../services/authClient";
+import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
 
 /**
  * Komponen Navbar - Navigation bar untuk dashboard
@@ -25,8 +24,7 @@ const Navbar = ({ sidebarOpen }) => {
   const [isOpen, setIsOpen] = useState(false);
   // Ref untuk handle klik di luar dropdown
   const dropdownRef = useRef(null);
-  // Hook untuk navigasi programmatic
-  const navigate = useNavigate();
+  // Redirect ditangani oleh forceLogout helper
 
   /**
    * Effect untuk handle klik di luar dropdown menu
@@ -49,25 +47,18 @@ const Navbar = ({ sidebarOpen }) => {
     };
   }, []);
 
-  // Ambil data user dari localStorage
-  const user = JSON.parse(localStorage.getItem("user"));
+  // Ambil data user dari localStorage dengan aman (tanpa auto-redirect)
+  const decryptedUser = getSafeUserDataNoRedirect();
 
-  // Return null jika user data tidak tersedia
-  if (!user) {
-    return null; // or handle the case where user data is not available
+  // Fallback jika user data tidak tersedia - tampilkan navbar sederhana
+  if (!decryptedUser) {
+    return (
+      <nav className="bg-white shadow-sm border-b h-16 flex items-center justify-between px-6">
+        <div className="text-lg font-semibold text-gray-900">SOP UNLA</div>
+        <div className="text-sm text-gray-500">Loading user data...</div>
+      </nav>
+    );
   }
-
-  // Setup untuk dekripsi email yang ter-encrypt
-  const secretKey = crypto.enc.Hex.parse(import.meta.env.VITE_SECRET_KEY);
-  const encryptedEmail = user?.email; // Email terenkripsi dari API response
-  // Split IV dan cipher text dari encrypted email
-  const [ivHex, cipherText] = encryptedEmail.split(":");
-  // Parse IV dari hex string
-  const iv = crypto.enc.Hex.parse(ivHex);
-  // Decrypt email menggunakan AES
-  const bytes = crypto.AES.decrypt(cipherText, secretKey, { iv });
-  // Convert bytes hasil dekripsi ke string UTF-8
-  const emailDecrypted = bytes.toString(crypto.enc.Utf8);
 
   /**
    * Handle logout process dengan konfirmasi
@@ -78,12 +69,8 @@ const Navbar = ({ sidebarOpen }) => {
     const isConfirmed = window.confirm("Apakah Anda yakin ingin keluar?");
     if (isConfirmed) {
       try {
-        // Panggil API logout untuk clear session
-        await logout();
-        // Clear data user dari localStorage
-        localStorage.removeItem("user");
-        // Redirect ke halaman login
-        navigate("/auth/login");
+        // Gunakan helper terpusat untuk panggil API logout, hapus semua data lokal, dan redirect
+        await forceLogout("/auth/login");
       } catch (err) {
         // Log error jika logout API gagal
         console.error("Logout error:", err);
@@ -114,10 +101,18 @@ const Navbar = ({ sidebarOpen }) => {
             className="flex items-center space-x-2 focus:outline-none cursor-pointer">
             {/* Avatar circle dengan inisial */}
             <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
-              JD
+              {decryptedUser?.name
+                ? decryptedUser.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                : "U"}
             </div>
             {/* Nama user - tampil hanya saat sidebar expanded */}
-            {sidebarOpen && <span className="text-sm">{user?.name}</span>}
+            {sidebarOpen && (
+              <span className="text-sm">{decryptedUser?.name}</span>
+            )}
             {/* Chevron icon dengan animasi rotasi */}
             <FiChevronDown
               className={`transition-transform ${
@@ -131,9 +126,9 @@ const Navbar = ({ sidebarOpen }) => {
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
               {/* User info section */}
               <div className="px-4 py-2 border-b">
-                <p className="text-sm font-medium">{user?.name}</p>
+                <p className="text-sm font-medium">{decryptedUser?.name}</p>
                 <p className="text-xs text-gray-500 truncate">
-                  {emailDecrypted}
+                  {decryptedUser?.email}
                 </p>
               </div>
 

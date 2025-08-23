@@ -6,9 +6,13 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 // Import root App component
 import App from "./App.jsx";
+// Initialize auth client on app startup (interceptors + token expiry scheduling)
+import { bootstrapAuthClient } from "./services/authClient";
 
 // Create root element dan render aplikasi
 // Menggunakan React 18+ createRoot API untuk performa yang lebih baik
+bootstrapAuthClient();
+
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     {/* StrictMode membantu identify potential problems dalam development */}

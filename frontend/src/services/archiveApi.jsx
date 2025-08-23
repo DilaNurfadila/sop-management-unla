@@ -1,9 +1,11 @@
 import axios from "axios";
+import { installAuthInterceptors } from "./authClient";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // Set credentials to true for cookies
 axios.defaults.withCredentials = true;
+installAuthInterceptors();
 
 // Create an axios instance with default headers
 const archiveApi = axios.create({

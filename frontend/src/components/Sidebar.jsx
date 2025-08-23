@@ -1,7 +1,9 @@
 // Import icon dari react-icons untuk UI sidebar
-import { FiHome, FiFile, FiArchive } from "react-icons/fi";
+import { FiHome, FiFile, FiArchive, FiUsers, FiGrid, FiActivity } from "react-icons/fi";
 // Import komponen navigasi dari React Router
 import { Link, useLocation } from "react-router-dom";
+// Import utility untuk mendapatkan data user
+import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
 
 /**
  * Komponen Sidebar - Navigasi samping untuk dashboard
@@ -14,6 +16,10 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   const location = useLocation();
   // Extract path pertama sebagai current page, default ke "dashboard"
   const currentPage = location.pathname.split("/")[1] || "dashboard";
+
+  // Mendapatkan data user untuk pengecekan role
+  const userData = getSafeUserDataNoRedirect();
+  const isAdmin = userData?.role === "admin";
 
   return (
     <div
@@ -71,6 +77,45 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           {/* Text label hanya tampil saat sidebar expanded */}
           {sidebarOpen && <span className="ml-3">Arsip Dokumen</span>}
         </Link>
+
+        {/* Menu Pengelolaan Pengguna - Hanya untuk Admin */}
+        {isAdmin && (
+          <Link
+            to="/users"
+            className={`flex items-center w-full p-3 my-1 ${
+              currentPage === "users" ? "bg-blue-700" : ""
+            } rounded-lg transition-colors`}>
+            <FiUsers size={20} />
+            {/* Text label hanya tampil saat sidebar expanded */}
+            {sidebarOpen && <span className="ml-3">Pengelolaan Pengguna</span>}
+          </Link>
+        )}
+
+        {/* Menu Pengelolaan Unit - Hanya untuk Admin */}
+        {isAdmin && (
+          <Link
+            to="/units"
+            className={`flex items-center w-full p-3 my-1 ${
+              currentPage === "units" ? "bg-blue-700" : ""
+            } rounded-lg transition-colors`}>
+            <FiGrid size={20} />
+            {/* Text label hanya tampil saat sidebar expanded */}
+            {sidebarOpen && <span className="ml-3">Pengelolaan Unit</span>}
+          </Link>
+        )}
+
+        {/* Menu Riwayat Aktivitas - Hanya untuk Admin */}
+        {isAdmin && (
+          <Link
+            to="/activity-logs"
+            className={`flex items-center w-full p-3 my-1 ${
+              currentPage === "activity-logs" ? "bg-blue-700" : ""
+            } rounded-lg transition-colors`}>
+            <FiActivity size={20} />
+            {/* Text label hanya tampil saat sidebar expanded */}
+            {sidebarOpen && <span className="ml-3">Riwayat Aktivitas</span>}
+          </Link>
+        )}
       </nav>
     </div>
   );

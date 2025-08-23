@@ -11,6 +11,8 @@ const authRoutes = require("./routes/authRoutes"); // Routes untuk authenticatio
 const userRoutes = require("./routes/userRoutes"); // Routes untuk user management
 const feedbackRoutes = require("./routes/feedbackRoutes"); // Routes untuk feedback sistem
 const archiveRoutes = require("./routes/archiveRoutes"); // Routes untuk archive sistem
+const unitRoutes = require("./routes/unitRoutes"); // Routes untuk unit management
+const activityLogRoutes = require("./routes/activityLogRoutes"); // Routes untuk activity logs
 
 // Load environment variables dari .env file
 require("dotenv").config();
@@ -45,6 +47,8 @@ app.use("/api/auth", authRoutes); // Endpoint untuk authentication (login, regis
 app.use("/api/users", userRoutes); // Endpoint untuk user management
 app.use("/api/feedback", feedbackRoutes); // Endpoint untuk sistem feedback
 app.use("/api/archive", archiveRoutes); // Endpoint untuk sistem arsip dokumen
+app.use("/api/units", unitRoutes); // Endpoint untuk unit management
+app.use("/api/activities", activityLogRoutes); // Endpoint untuk activity logs
 
 /**
  * Global Error Handler Middleware

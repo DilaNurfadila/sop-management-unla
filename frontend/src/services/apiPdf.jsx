@@ -1,5 +1,6 @@
 // Import axios untuk HTTP requests
 import axios from "axios";
+import { installAuthInterceptors } from "./authClient";
 
 // Buat instance axios khusus untuk operasi PDF/file dokumen SOP
 const api = axios.create({
@@ -7,22 +8,10 @@ const api = axios.create({
   withCredentials: true, // Enable cookies untuk authentication
 });
 
-// Tambahkan request interceptor untuk menyertakan JWT token dalam header
-api.interceptors.request.use(
-  (config) => {
-    // Ambil token dari localStorage
-    const token = localStorage.getItem("token");
-    if (token) {
-      // Tambahkan Authorization header dengan Bearer token
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    // Handle error pada interceptor
-    return Promise.reject(error);
-  }
-);
+// Ensure global 401 handling
+installAuthInterceptors();
+
+// Tidak perlu Authorization header; gunakan cookie HTTP-only
 
 /**
  * Function untuk mengambil semua dokumen PDF SOP

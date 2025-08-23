@@ -12,13 +12,21 @@ This application is still under development
 
 - SOP Publication
 
-- Login (with email service)
+- Login
 
 - Displaying SOP published on public page
 
 - SOP Feedback
 
 - SOP Archive
+
+- Displaying user profile
+
+- User settings
+
+- Users management
+
+- Log Activity (on progress)
 
 ## How to Install
 
@@ -48,7 +56,7 @@ Backend :
 - JWT_REFRESH_SECRET
 - FRONTEND_URL
 - NODE_ENV
-- KEY
+- ENCRYPTION_KEY
 - FIREBASE_API_KEY
 - FIREBASE_AUTH_DOMAIN
 - FIREBASE_PROJECT_ID

@@ -1,5 +1,5 @@
 // Import React hooks untuk state management
-import { useState } from "react";
+import { useState, useEffect } from "react";
 // Import React Router components untuk routing
 import {
   BrowserRouter as Router,
@@ -7,6 +7,9 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+
+// Import auth client untuk bootstrap authentication
+import { bootstrapAuthClient } from "./services/authClient";
 
 // Import semua page components
 import Dashboard from "./pages/Dashboard";
@@ -17,12 +20,19 @@ import AddDocPage from "./pages/docPages/AddDocPage";
 import EditPdfDocPage from "./pages/docPages/EditPdfDocPage";
 import Login from "./pages/authPage/Login";
 import Register from "./pages/authPage/Register";
+import ResetPassword from "./pages/authPage/ResetPassword";
 import MainLayout from "./components/MainLayout";
 import Home from "./pages/Home";
 import Contact from "./pages/Contact";
 import About from "./pages/About";
 import PublishedSOPsPage from "./pages/PublishedSOPsPage";
 import ArchivePage from "./pages/ArchivePage";
+import UserManagementPage from "./pages/UserManagementPage";
+import UnitManagementPage from "./pages/UnitManagementPage";
+import ActivityLogsPage from "./pages/ActivityLogsPage";
+import ProtectedRoute from "./components/ProtectedRoute";
+// Auth checks rely on HTTP-only cookies; token is not stored client-side
+import { getSafeUserDataNoRedirect } from "./utils/cryptoUtils.jsx";
 
 /**
  * Komponen App - Root component aplikasi SOP Management
@@ -34,16 +44,27 @@ function App() {
   // State untuk tracking halaman aktif saat ini
   const [currentPage, setCurrentPage] = useState("dashboard");
 
+  // Bootstrap auth client saat app load
+  useEffect(() => {
+    bootstrapAuthClient();
+  }, []);
+
   /**
    * Komponen PrivateRoute - Higher Order Component untuk protected routes
    * Mengecek apakah user sudah login sebelum mengakses halaman terproteksi
    * @param {ReactNode} children - Component yang akan di-render jika user sudah login
    */
   const PrivateRoute = ({ children }) => {
-    // Cek apakah ada data user di localStorage
-    const user = JSON.parse(localStorage.getItem("user"));
-    // Return children jika user ada, redirect ke login jika tidak
-    return user ? children : <Navigate to="/auth/login" />;
+    // Cek apakah ada data user di storage menggunakan fungsi yang tidak auto-redirect
+    const user = getSafeUserDataNoRedirect();
+
+    // Jika tidak ada user, redirect ke login. Validasi lanjutan dilakukan server via cookie
+    if (!user) {
+      console.log("No user data found, redirecting to login");
+      return <Navigate to="/auth/login" />;
+    }
+
+    return children;
   };
 
   return (
@@ -51,7 +72,10 @@ function App() {
       <Routes>
         {/* Public Routes (tanpa layout) - dapat diakses tanpa login */}
         <Route path="/auth/login" element={<Login />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/auth/register" element={<Register />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
@@ -120,6 +144,36 @@ function App() {
             element={
               <PrivateRoute>
                 <ArchivePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <PrivateRoute>
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <UserManagementPage />
+                </ProtectedRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/units"
+            element={
+              <PrivateRoute>
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <UnitManagementPage />
+                </ProtectedRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/activity-logs"
+            element={
+              <PrivateRoute>
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <ActivityLogsPage />
+                </ProtectedRoute>
               </PrivateRoute>
             }
           />

@@ -2,6 +2,51 @@
 const Feedback = require("../models/Feedback");
 // Import model SopDoc untuk operasi database dokumen SOP
 const SopDoc = require("../models/SopDoc");
+// Import model ActivityLog untuk logging aktivitas
+const ActivityLog = require("../models/ActivityLog");
+
+/**
+ * Helper function untuk logging aktivitas feedback
+ * @param {Object} user - Data user yang melakukan aksi
+ * @param {string} action - Aksi yang dilakukan (CREATE, UPDATE, DELETE)
+ * @param {string} description - Deskripsi aktivitas
+ * @param {Object} req - Request object untuk mendapatkan IP dan user agent
+ * @param {Object} targetData - Data target (opsional)
+ */
+const logFeedbackActivity = async (
+  user,
+  action,
+  description,
+  req,
+  targetData = null
+) => {
+  try {
+    // Pastikan semua parameter user ada, gunakan default jika undefined
+    // Jika user_id null, gunakan system user (ID 32) untuk foreign key constraint
+    const userId = user?.id || 32;
+    const userName = user?.name || user?.email || "Unknown User";
+    const userRole = user?.role || "user";
+
+    // Pastikan parameter lain juga tidak undefined
+    const actionStr = action || "UNKNOWN";
+    const descriptionStr = description || "No description";
+
+    await ActivityLog.logUserActivity(
+      userId,
+      userName,
+      userRole,
+      actionStr,
+      "FEEDBACK",
+      descriptionStr,
+      req,
+      targetData?.id || null,
+      targetData ? "feedback" : null
+    );
+  } catch (error) {
+    console.error("Error logging feedback activity:", error.message);
+    // Tidak throw error agar tidak mengganggu flow utama
+  }
+};
 
 /**
  * Controller untuk membuat feedback baru pada dokumen SOP
@@ -51,6 +96,24 @@ exports.createFeedback = async (req, res) => {
 
     // Simpan feedback ke database
     const result = await Feedback.create(feedbackData);
+
+    // Ambil data SOP untuk logging
+    const sopDoc = await SopDoc.findById(sop_id);
+    const sopTitle = sopDoc ? sopDoc.title : `SOP ID: ${sop_id}`;
+
+    // Log aktivitas pembuatan feedback
+    await logFeedbackActivity(
+      {
+        id: 32, // Gunakan ID system/superadmin untuk feedback publik
+        name: `System (atas nama ${user_name})`,
+        user_name: user_name,
+        role: "public",
+      },
+      "CREATE",
+      `User publik ${user_name} memberikan feedback (rating: ${rating}) untuk SOP: ${sopTitle}`,
+      req,
+      { id: result.id }
+    );
 
     // Kirim response sukses dengan data feedback yang baru dibuat
     res.status(201).json({
@@ -145,8 +208,24 @@ exports.deleteFeedback = async (req, res) => {
     // Ekstrak id feedback dari parameter URL
     const { id } = req.params;
 
+    // Ambil data feedback sebelum dihapus untuk logging
+    const feedbackToDelete = await Feedback.findById(id);
+    if (!feedbackToDelete) {
+      return res.status(404).json({ message: "Feedback tidak ditemukan" });
+    }
+
     // Hapus feedback dari database
     await Feedback.deleteFeedback(id);
+
+    // Log aktivitas penghapusan feedback (biasanya dilakukan oleh admin)
+    const adminUser = req.user || { id: null, name: "System", role: "admin" };
+    await logFeedbackActivity(
+      adminUser,
+      "DELETE",
+      `${adminUser.name} menghapus feedback dari ${feedbackToDelete.user_name} (Rating: ${feedbackToDelete.rating})`,
+      req,
+      { id: feedbackToDelete.id }
+    );
 
     // Kirim response sukses
     res.status(200).json({ message: "Feedback berhasil dihapus" });
@@ -188,8 +267,26 @@ exports.updateFeedback = async (req, res) => {
       comment: comment || "", // Comment opsional, default empty string
     };
 
+    // Ambil data feedback lama untuk logging
+    const oldFeedback = await Feedback.findById(id);
+    if (!oldFeedback) {
+      return res.status(404).json({ message: "Feedback tidak ditemukan" });
+    }
+
     // Update feedback di database
     const result = await Feedback.updateFeedback(id, feedbackData);
+
+    // Log aktivitas update feedback (biasanya dilakukan oleh admin)
+    const adminUser = req.user || { id: null, name: "System", role: "admin" };
+    await logFeedbackActivity(
+      adminUser,
+      "UPDATE",
+      `${adminUser.name} mengupdate feedback dari ${oldFeedback.user_name} (Rating: ${oldFeedback.rating} → ${rating})`,
+      req,
+      {
+        id: result.id,
+      }
+    );
 
     // Kirim response sukses dengan data feedback yang sudah diupdate
     res.status(200).json({

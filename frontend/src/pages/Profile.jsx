@@ -1,252 +1,144 @@
-// Import React hooks untuk state management
-import { useState } from "react";
-// Import crypto-js untuk dekripsi email
-import crypto from "crypto-js";
+// Import React
+import React from "react";
+// Import crypto utility functions
+import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
 // Import icon dari react-icons untuk UI profile
-import {
-  FiUser,
-  FiMail,
-  FiPhone,
-  FiMapPin,
-  FiLock,
-  FiCamera,
-  FiSave,
-} from "react-icons/fi";
+import { FiUser, FiMail, FiUsers, FiBriefcase, FiMapPin } from "react-icons/fi";
 
 /**
- * Komponen Profile - Halaman profil user dengan edit functionality
- * Menampilkan informasi user dan memungkinkan editing data
+ * Komponen Profile - Halaman profil user (view-only)
+ * Menampilkan informasi user tanpa fitur editing
  */
 const Profile = () => {
-  // Ambil data user dari localStorage
-  const user = JSON.parse(localStorage.getItem("user"));
+  // Ambil data user dari sessionStorage menggunakan fungsi helper
+  const user = getSafeUserDataNoRedirect();
 
-  // Setup untuk dekripsi email yang ter-encrypt
-  const secretKey = crypto.enc.Hex.parse(import.meta.env.VITE_SECRET_KEY);
-  const encryptedEmail = user?.email; // Email terenkripsi dari API response
-  // Split IV dan cipher text dari encrypted email
-  const [ivHex, cipherText] = encryptedEmail.split(":");
-  // Parse IV dari hex string
-  const iv = crypto.enc.Hex.parse(ivHex);
-  // Decrypt email menggunakan AES
-  const bytes = crypto.AES.decrypt(cipherText, secretKey, { iv });
-  // Convert bytes hasil dekripsi ke string UTF-8
-  const emailDecrypted = bytes.toString(crypto.enc.Utf8);
-
-  // State untuk mode edit profile
-  const [editMode, setEditMode] = useState(false);
-  // State untuk form data dengan data default dari user
-  const [formData, setFormData] = useState({
-    name: user?.name || "Unknown User",
-    email: emailDecrypted || "Unknown Email",
-    organization: user?.organization || "Unknown Organization",
-    position: user?.position || "Unknown Position",
-  });
-
-  /**
-   * Handle perubahan input form
-   * @param {Event} e - Event dari input field
-   */
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    // Update form data dengan spread operator
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  // Fungsi untuk mengkonversi role ke format yang user-friendly
+  const getRoleLabel = (role) => {
+    switch (role) {
+      case "admin":
+        return "Admin";
+      case "admin_unit":
+        return "Admin Unit";
+      case "user":
+        return "User";
+      default:
+        return role || "Role tidak tersedia";
+    }
   };
 
-  /**
-   * Handle submit form profile
-   * @param {Event} e - Event dari form submit
-   */
-  const handleSubmit = (e) => {
-    e.preventDefault(); // Prevent default form submission
-    setEditMode(false); // Keluar dari edit mode
-    // TODO: Tambahkan logika penyimpanan ke API di sini
+  // Fungsi untuk mendapatkan warna badge role
+  const getRoleBadgeColor = (role) => {
+    switch (role) {
+      case "admin":
+        return "bg-red-100 text-red-800";
+      case "admin_unit":
+        return "bg-blue-100 text-blue-800";
+      case "user":
+        return "bg-green-100 text-green-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      {/* Page title */}
-      <h1 className="text-2xl font-bold mb-6">Profil Saya</h1>
-
-      {/* Card container untuk profile */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {/* Header Profil dengan background biru */}
-        <div className="bg-blue-600 p-6 text-white">
-          <div className="flex flex-col md:flex-row items-center">
-            {/* Avatar section dengan relative positioning untuk edit button */}
-            <div className="relative mb-4 md:mb-0">
-              {/* Avatar circle dengan inisial user */}
-              <div className="w-24 h-24 rounded-full bg-blue-400 flex items-center justify-center text-3xl font-bold">
-                {user?.name
-                  ? user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .toUpperCase()
-                  : "JD"}
+    <div className="min-h-screen bg-gray-100 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        {/* Header Section */}
+        <div className="bg-white rounded-xl shadow-md overflow-hidden mb-8">
+          <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-12">
+            <div className="flex items-center space-x-6">
+              {/* Avatar */}
+              <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center">
+                <FiUser size={48} className="text-gray-400" />
               </div>
-              {editMode && (
-                <button className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow-md text-blue-600 hover:bg-gray-100">
-                  <FiCamera size={16} />
-                </button>
-              )}
-            </div>
-            <div className="md:ml-6 text-center md:text-left">
-              <h2 className="text-xl font-semibold">{formData.name}</h2>
-              <p className="text-blue-100">{formData.email}</p>
-              <p className="text-blue-100 mt-1">Bergabung sejak Jan 2023</p>
+
+              {/* User Info */}
+              <div className="text-white">
+                <h1 className="text-3xl font-bold mb-2">
+                  {user?.name || "Unknown User"}
+                </h1>
+                <p className="text-blue-100 text-lg">
+                  {user?.position || "Unknown Position"}
+                </p>
+                <div className="flex items-center space-x-4 mt-2">
+                  <span className="bg-blue-500 bg-opacity-30 px-3 py-1 rounded-full text-sm">
+                    {getRoleLabel(user?.role)}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Form Profil */}
-        <form onSubmit={handleSubmit} className="p-6">
+        {/* Profile Details Section */}
+        <div className="bg-white rounded-xl shadow-md p-8">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">
+            Informasi Profil
+          </h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
-                  <FiUser className="mr-2" /> Nama Lengkap
-                </label>
-                {editMode ? (
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <p className="px-4 py-2 bg-gray-50 rounded-lg">
-                    {formData.name}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
-                  <FiMail className="mr-2" /> Email
-                </label>
-                {editMode ? (
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <p className="px-4 py-2 bg-gray-50 rounded-lg">
-                    {formData.email}
-                  </p>
-                )}
+            {/* Email */}
+            <div className="space-y-2">
+              <label className="flex items-center text-sm font-medium text-gray-700">
+                <FiMail className="mr-2" />
+                Email
+              </label>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800">
+                {user?.email || "Email tidak tersedia"}
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
-                  <FiPhone className="mr-2" /> Nomor Telepon
-                </label>
-                {editMode ? (
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <p className="px-4 py-2 bg-gray-50 rounded-lg">
-                    {formData.phone}
-                  </p>
-                )}
+            {/* Name */}
+            <div className="space-y-2">
+              <label className="flex items-center text-sm font-medium text-gray-700">
+                <FiUser className="mr-2" />
+                Nama Lengkap
+              </label>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800">
+                {user?.name || "Nama tidak tersedia"}
               </div>
+            </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center">
-                  <FiMapPin className="mr-2" /> Alamat
-                </label>
-                {editMode ? (
-                  <textarea
-                    name="address"
-                    value={formData.address}
-                    onChange={handleChange}
-                    rows={3}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <p className="px-4 py-2 bg-gray-50 rounded-lg">
-                    {formData.address}
-                  </p>
-                )}
+            {/* Unit */}
+            <div className="space-y-2">
+              <label className="flex items-center text-sm font-medium text-gray-700">
+                <FiUsers className="mr-2" />
+                Unit Kerja
+              </label>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800">
+                {user?.unit || "Unit tidak tersedia"}
+              </div>
+            </div>
+
+            {/* Position */}
+            <div className="space-y-2">
+              <label className="flex items-center text-sm font-medium text-gray-700">
+                <FiBriefcase className="mr-2" />
+                Jabatan
+              </label>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800">
+                {user?.position || "Jabatan tidak tersedia"}
+              </div>
+            </div>
+
+            {/* Role */}
+            <div className="space-y-2">
+              <label className="flex items-center text-sm font-medium text-gray-700">
+                <FiMapPin className="mr-2" />
+                Role Sistem
+              </label>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800">
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleBadgeColor(
+                    user?.role
+                  )}`}>
+                  {getRoleLabel(user?.role)}
+                </span>
               </div>
             </div>
           </div>
-
-          {/* Password Section */}
-          <div className="mt-8 pt-6 border-t">
-            <h3 className="text-lg font-medium flex items-center">
-              <FiLock className="mr-2" /> Keamanan Akun
-            </h3>
-            <div className="mt-4 space-y-4">
-              {editMode ? (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Password Saat Ini
-                    </label>
-                    <input
-                      type="password"
-                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Password Baru
-                    </label>
-                    <input
-                      type="password"
-                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setEditMode(true)}
-                  className="text-blue-600 hover:text-blue-800 font-medium">
-                  Ubah Password
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="mt-8 flex justify-end space-x-3">
-            {editMode ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setEditMode(false)}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50">
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
-                  <FiSave className="mr-2" /> Simpan Perubahan
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setEditMode(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
-                Edit Profil
-              </button>
-            )}
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );

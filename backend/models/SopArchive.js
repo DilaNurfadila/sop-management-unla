@@ -7,6 +7,53 @@ const pool = require("../config/db");
  */
 class SopArchive {
   /**
+   * Constructor untuk membuat instance SopArchive
+   * @param {string} title - Judul dokumen yang diarsipkan
+   * @param {string} description - Deskripsi dokumen arsip
+   * @param {string} filePath - Path file dokumen di storage
+   * @param {string} fileName - Nama file dokumen
+   * @param {number} fileSize - Ukuran file dalam bytes (opsional)
+   * @param {string} version - Versi dokumen yang diarsipkan
+   * @param {string} category - Kategori dokumen arsip
+   * @param {string} status - Status dokumen saat diarsipkan
+   * @param {number} createdBy - ID pengguna yang melakukan arsip
+   * @param {string} reason - Alasan pengarsipan dokumen
+   */
+  constructor(
+    title,
+    description,
+    filePath,
+    fileName,
+    version,
+    category,
+    status,
+    createdBy,
+    reason,
+    fileSize = null
+  ) {
+    // Menyimpan judul dokumen yang diarsipkan
+    this.title = title;
+    // Menyimpan deskripsi dokumen arsip
+    this.description = description;
+    // Menyimpan path file dokumen di storage
+    this.file_path = filePath;
+    // Menyimpan nama file dokumen
+    this.file_name = fileName;
+    // Menyimpan ukuran file dalam bytes
+    this.file_size = fileSize;
+    // Menyimpan versi dokumen yang diarsipkan
+    this.version = version;
+    // Menyimpan kategori dokumen untuk pengelompokan
+    this.category = category;
+    // Menyimpan status dokumen saat diarsipkan
+    this.status = status;
+    // Menyimpan ID pengguna yang melakukan arsip
+    this.created_by = createdBy;
+    // Menyimpan alasan pengarsipan dokumen
+    this.reason = reason;
+  }
+
+  /**
    * Helper function untuk mengkonversi struktur sop_documents ke format archive
    * @param {Object} sopDoc - Object dokumen SOP dari tabel sop_documents
    * @returns {Object} - Object dengan format yang sesuai untuk tabel sop_archive

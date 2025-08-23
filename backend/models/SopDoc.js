@@ -1,8 +1,54 @@
 // Import konfigurasi database connection pool
 const pool = require("../config/db");
 
-// Class untuk mengelola operasi database SOP Documents
+/**
+ * Class untuk mengelola operasi database SOP Documents
+ * Menangani CRUD operations untuk dokumen SOP
+ */
 class SopDoc {
+  /**
+   * Constructor untuk membuat instance SopDoc
+   * @param {string} sopTitle - Judul dokumen SOP
+   * @param {string} sopCode - Kode unik dokumen SOP
+   * @param {string} sopVersion - Versi dokumen SOP
+   * @param {string} organization - Organisasi/unit pemilik dokumen
+   * @param {string} url - URL/path file dokumen
+   * @param {number} userId - ID pengguna yang upload dokumen
+   * @param {string} description - Deskripsi dokumen (opsional)
+   * @param {string} status - Status dokumen (draft, published, archived)
+   * @param {string} category - Kategori dokumen (opsional)
+   */
+  constructor(
+    sopTitle,
+    sopCode,
+    sopVersion,
+    organization,
+    url,
+    userId,
+    description = null,
+    status = "draft",
+    category = null
+  ) {
+    // Menyimpan judul dokumen SOP
+    this.sop_title = sopTitle;
+    // Menyimpan kode unik dokumen untuk identifikasi
+    this.sop_code = sopCode;
+    // Menyimpan versi dokumen untuk tracking revisi
+    this.sop_version = sopVersion;
+    // Menyimpan organisasi/unit pemilik dokumen
+    this.organization = organization;
+    // Menyimpan path/URL file dokumen di storage
+    this.url = url;
+    // Menyimpan ID pengguna yang mengupload dokumen
+    this.user_id = userId;
+    // Menyimpan deskripsi dokumen (opsional)
+    this.description = description;
+    // Menyimpan status dokumen (draft, published, archived)
+    this.status = status;
+    // Menyimpan kategori dokumen untuk pengelompokan
+    this.category = category;
+  }
+
   /**
    * Helper method untuk mendapatkan informasi user berdasarkan user_id
    * @param {number} userId - ID user yang akan dicari

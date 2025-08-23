@@ -1,5 +1,6 @@
 // Import axios untuk HTTP requests
 import axios from "axios";
+import { installAuthInterceptors } from "./authClient";
 
 // Base URL API dari environment variable atau default localhost
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -7,6 +8,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 // Enable credentials (cookies) untuk semua axios requests
 // Diperlukan untuk authentication menggunakan HTTP-only cookies
 axios.defaults.withCredentials = true;
+installAuthInterceptors();
 
 // Buat instance axios khusus untuk feedback API dengan konfigurasi default
 const feedbackApi = axios.create({

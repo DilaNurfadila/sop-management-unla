@@ -1,5 +1,6 @@
 // Import React Router untuk navigasi
 import { Link, useNavigate } from "react-router-dom";
+import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
 
 /**
  * Komponen Navbar untuk navigasi utama di halaman publik
@@ -9,8 +10,8 @@ const Navbar = () => {
   // Hook untuk navigasi programmatic
   const navigate = useNavigate();
 
-  // Ambil data user dari localStorage untuk cek status login
-  const user = JSON.parse(localStorage.getItem("user"));
+  // Ambil data user dari sessionStorage untuk cek status login
+  const user = getSafeUserDataNoRedirect();
 
   return (
     <nav className="bg-blue-800 text-white p-4 shadow-md">

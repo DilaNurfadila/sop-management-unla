@@ -1,5 +1,6 @@
 // Import axios untuk HTTP requests
 import axios from "axios";
+import { installAuthInterceptors } from "./authClient";
 
 // Base URL untuk API endpoints dokumen SOP
 const API_URL = "http://localhost:5000/api/docs";
@@ -7,6 +8,7 @@ const API_URL = "http://localhost:5000/api/docs";
 // Enable credentials (cookies) untuk semua axios requests
 // Diperlukan untuk authentication menggunakan HTTP-only cookies
 axios.defaults.withCredentials = true;
+installAuthInterceptors();
 
 // Buat instance axios dengan konfigurasi default
 const api = axios.create({

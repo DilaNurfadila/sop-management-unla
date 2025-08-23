@@ -2,6 +2,8 @@
 const SopDoc = require("../models/SopDoc");
 // Import model SopArchive untuk operasi arsip dokumen
 const SopArchive = require("../models/SopArchive");
+// Import model ActivityLog untuk logging aktivitas
+const ActivityLog = require("../models/ActivityLog");
 // Import jsonwebtoken untuk verifikasi JWT token
 const jwt = require("jsonwebtoken");
 // Import konfigurasi dan method Firebase Storage
@@ -12,6 +14,49 @@ const {
   getDownloadURL, // Method untuk mendapatkan URL download
   deleteObject, // Method untuk menghapus file
 } = require("../config/firebase");
+
+/**
+ * Helper function untuk logging aktivitas document
+ * @param {Object} user - Data user yang melakukan aksi
+ * @param {string} action - Aksi yang dilakukan (CREATE, UPDATE, DELETE, ARCHIVE)
+ * @param {string} description - Deskripsi aktivitas
+ * @param {Object} req - Request object untuk mendapatkan IP dan user agent
+ * @param {Object} targetData - Data target (opsional)
+ */
+const logDocumentActivity = async (
+  user,
+  action,
+  description,
+  req,
+  targetData = null
+) => {
+  try {
+    // Pastikan semua parameter user ada, gunakan default jika undefined
+    // Jika user_id null, gunakan system user (ID 32) untuk foreign key constraint
+    const userId = user?.id || 32;
+    const userName = user?.name || user?.email || "Unknown User";
+    const userRole = user?.role || "user";
+
+    // Pastikan parameter lain juga tidak undefined
+    const actionStr = action || "UNKNOWN";
+    const descriptionStr = description || "No description";
+
+    await ActivityLog.logUserActivity(
+      userId,
+      userName,
+      userRole,
+      actionStr,
+      "DOCUMENT",
+      descriptionStr,
+      req,
+      targetData?.id || null,
+      targetData ? "document" : null
+    );
+  } catch (error) {
+    console.error("Error logging document activity:", error.message);
+    // Tidak throw error agar tidak mengganggu flow utama
+  }
+};
 
 /**
  * Controller untuk mendapatkan semua dokumen SOP
@@ -62,6 +107,17 @@ exports.getDocById = async (req, res) => {
       return res.status(404).json({ message: "SOP document not found" });
     }
 
+    // Log aktivitas melihat dokumen (jika user terautentikasi)
+    if (req.user) {
+      await logDocumentActivity(
+        req.user,
+        "VIEW",
+        `${req.user.name} melihat dokumen SOP: ${doc.title}`,
+        req,
+        { id: doc.id }
+      );
+    }
+
     // Kirim response sukses dengan data dokumen
     res.status(200).json(doc);
   } catch (error) {
@@ -109,6 +165,15 @@ exports.createDoc = async (req, res) => {
 
     // Simpan dokumen SOP baru ke database
     const newDoc = await SopDoc.createSopDoc(sopData);
+
+    // Log aktivitas pembuatan dokumen
+    await logDocumentActivity(
+      req.user,
+      "CREATE",
+      `User ${req.user.name} membuat dokumen SOP baru: ${sopData.title}`,
+      req,
+      { id: newDoc.id }
+    );
 
     // Kirim response sukses dengan data dokumen baru
     res
@@ -250,6 +315,19 @@ exports.updateFile = async (req, res) => {
           archive_reason || "Dokumen diganti dengan file baru"
         );
         console.log("Archive successful:", archiveResult);
+
+        // Log aktivitas pengarsipan dokumen
+        await logDocumentActivity(
+          req.user,
+          "ARCHIVE",
+          `User ${req.user.name} mengarsipkan dokumen SOP: ${
+            existingDoc.sop_title
+          } dengan alasan: ${
+            archive_reason || "Dokumen diganti dengan file baru"
+          }`,
+          req,
+          { id: existingDoc.id }
+        );
       } catch (archiveError) {
         console.error(
           "Error archiving document:",
@@ -378,6 +456,15 @@ exports.deleteDoc = async (req, res) => {
 
     // Hapus record dari database
     await SopDoc.delete(req.params.id);
+
+    // Log aktivitas penghapusan dokumen
+    await logDocumentActivity(
+      req.user,
+      "DELETE",
+      `User ${req.user.name} menghapus dokumen SOP: ${doc.title}`,
+      req,
+      { id: doc.id }
+    );
 
     // Kirim response sukses
     res.status(200).json({ message: "SOP document deleted successfully" });

@@ -43,12 +43,46 @@ exports.authenticate = async (req, res, next) => {
         console.error("Gagal membersihkan token yang expired:", e.message);
       }
 
+      // Pastikan cookie token dibersihkan dari browser
+      try {
+        res.clearCookie("token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/",
+        });
+      } catch (e) {
+        // noop
+      }
+
       return res
         .status(401)
         .json({ message: "Sesi telah berakhir, silakan login kembali" });
     }
 
     // Handle error lainnya (token invalid, malformed, dll)
+    try {
+      // Coba decode untuk membersihkan token di DB jika memungkinkan
+      const decoded = jwt.decode(token);
+      if (decoded && decoded.email) {
+        await Auth.logout(decoded.email);
+      }
+    } catch (e) {
+      // noop
+    }
+
+    // Bersihkan cookie jika token tidak valid
+    try {
+      res.clearCookie("token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+      });
+    } catch (e) {
+      // noop
+    }
+
     res.status(401).json({ message: "Token tidak valid" });
   }
 };

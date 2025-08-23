@@ -12,7 +12,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google-cloud/local-auth": "^2.1.0",
     "axios": "^1.11.0",
+    "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
@@ -22,6 +24,7 @@
     "express": "^5.1.0",
     "express-jwt": "^8.5.1",
     "firebase": "^12.1.0",
+    "googleapis": "^105.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "mysql2": "^3.14.1",

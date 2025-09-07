@@ -1,5 +1,7 @@
 // Import jsonwebtoken untuk verifikasi JWT token
 const jwt = require("jsonwebtoken");
+// Import model User untuk mengambil data lengkap user
+const User = require("../models/User");
 // Load environment variables
 require("dotenv").config();
 // Import model Auth untuk operasi logout
@@ -12,8 +14,21 @@ const Auth = require("../models/Auth");
  * @param {Function} next - Next function untuk melanjutkan ke middleware berikutnya
  */
 exports.authenticate = async (req, res, next) => {
-  // Ambil token dari cookie HTTP-only
-  const token = req.cookies.token;
+  // Tentukan nama cookie berdasarkan origin
+  let cookieName = "token";
+
+  if (req.headers.origin) {
+    const origin = req.headers.origin;
+    if (origin.includes(":5174")) {
+      cookieName = "token_5174";
+    } else if (origin.includes(":5173")) {
+      cookieName = "token_5173";
+    }
+  }
+
+  // Ambil token dari cookie HTTP-only berdasarkan nama cookie yang sesuai
+  // Pastikan req.cookies ada sebelum mengakses property
+  const token = req.cookies ? req.cookies[cookieName] : null;
 
   // Jika token tidak ada, tolak akses
   if (!token) {
@@ -25,8 +40,21 @@ exports.authenticate = async (req, res, next) => {
   try {
     // Verifikasi dan decode JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    // Simpan data user dari token ke request object
-    req.user = decoded;
+
+    // Ambil data lengkap user dari database berdasarkan ID dari token
+    try {
+      const fullUserData = await User.findById(decoded.id);
+      if (fullUserData) {
+        // Simpan data user lengkap ke request object
+        req.user = fullUserData;
+      } else {
+        // Jika user tidak ditemukan di database, gunakan data dari token
+        req.user = decoded;
+      }
+    } catch (dbError) {// Fallback ke data dari token jika gagal akses database
+      req.user = decoded;
+    }
+
     // Lanjutkan ke middleware atau route handler berikutnya
     next();
   } catch (error) {
@@ -39,9 +67,7 @@ exports.authenticate = async (req, res, next) => {
           // Hapus token yang expired dari database
           await Auth.logout(decoded.email);
         }
-      } catch (e) {
-        console.error("Gagal membersihkan token yang expired:", e.message);
-      }
+      } catch (e) {}
 
       // Pastikan cookie token dibersihkan dari browser
       try {

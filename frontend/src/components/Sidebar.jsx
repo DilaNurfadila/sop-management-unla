@@ -1,5 +1,16 @@
 // Import icon dari react-icons untuk UI sidebar
-import { FiHome, FiFile, FiArchive, FiUsers, FiGrid, FiActivity } from "react-icons/fi";
+import {
+  FiHome,
+  FiFile,
+  FiArchive,
+  FiUsers,
+  FiGrid,
+  FiActivity,
+  FiUserPlus,
+  FiClipboard,
+  FiCheckSquare,
+  FiEdit,
+} from "react-icons/fi";
 // Import komponen navigasi dari React Router
 import { Link, useLocation } from "react-router-dom";
 // Import utility untuk mendapatkan data user
@@ -19,7 +30,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
   // Mendapatkan data user untuk pengecekan role
   const userData = getSafeUserDataNoRedirect();
-  const isAdmin = userData?.role === "admin";
+  const isAdmin = userData?.role === "admin" || userData?.role === "admin_unit";
 
   return (
     <div
@@ -78,8 +89,19 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           {sidebarOpen && <span className="ml-3">Arsip Dokumen</span>}
         </Link>
 
-        {/* Menu Pengelolaan Pengguna - Hanya untuk Admin */}
-        {isAdmin && (
+        {/* Menu Review SOP - Untuk user yang memiliki role reviewer/approver */}
+        <Link
+          to="/review"
+          className={`flex items-center w-full p-3 my-1 ${
+            currentPage === "review" ? "bg-blue-700" : ""
+          } rounded-lg transition-colors`}>
+          <FiCheckSquare size={20} />
+          {/* Text label hanya tampil saat sidebar expanded */}
+          {sidebarOpen && <span className="ml-3">Review SOP</span>}
+        </Link>
+
+        {/* Menu Pengelolaan Pengguna - Hanya untuk Admin Penuh */}
+        {userData?.role === "admin" && (
           <Link
             to="/users"
             className={`flex items-center w-full p-3 my-1 ${
@@ -91,8 +113,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           </Link>
         )}
 
-        {/* Menu Pengelolaan Unit - Hanya untuk Admin */}
-        {isAdmin && (
+        {/* Menu Pengelolaan Unit - Hanya untuk Admin Penuh */}
+        {userData?.role === "admin" && (
           <Link
             to="/units"
             className={`flex items-center w-full p-3 my-1 ${
@@ -104,8 +126,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           </Link>
         )}
 
-        {/* Menu Riwayat Aktivitas - Hanya untuk Admin */}
-        {isAdmin && (
+        {/* Menu Riwayat Aktivitas - Hanya untuk Admin Penuh */}
+        {userData?.role === "admin" && (
           <Link
             to="/activity-logs"
             className={`flex items-center w-full p-3 my-1 ${
@@ -114,6 +136,62 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             <FiActivity size={20} />
             {/* Text label hanya tampil saat sidebar expanded */}
             {sidebarOpen && <span className="ml-3">Riwayat Aktivitas</span>}
+          </Link>
+        )}
+
+        {/* Menu Kelola Permintaan Revisi - Hanya untuk Admin */}
+        {userData?.role === "admin" && (
+          <Link
+            to="/revision-requests"
+            className={`flex items-center w-full p-3 my-1 ${
+              currentPage === "revision-requests" ? "bg-blue-700" : ""
+            } rounded-lg transition-colors`}>
+            <FiEdit size={20} />
+            {/* Text label hanya tampil saat sidebar expanded */}
+            {sidebarOpen && (
+              <span className="ml-3">Kelola Permintaan Revisi</span>
+            )}
+          </Link>
+        )}
+
+        {/* Menu Tugaskan - Hanya untuk Admin */}
+        {isAdmin && (
+          <Link
+            to="/sop/assign-creator"
+            className={`flex items-center w-full p-3 my-1 ${
+              location.pathname === "/sop/assign-creator" ? "bg-blue-700" : ""
+            } rounded-lg transition-colors`}>
+            <FiUserPlus size={20} />
+            {/* Text label hanya tampil saat sidebar expanded */}
+            {sidebarOpen && <span className="ml-3">Tugaskan</span>}
+          </Link>
+        )}
+
+        {/* Menu Kelola Penugasan - Hanya untuk Admin */}
+        {isAdmin && (
+          <Link
+            to="/sop/assignment-management"
+            className={`flex items-center w-full p-3 my-1 ${
+              location.pathname === "/sop/assignment-management"
+                ? "bg-blue-700"
+                : ""
+            } rounded-lg transition-colors`}>
+            <FiClipboard size={20} />
+            {/* Text label hanya tampil saat sidebar expanded */}
+            {sidebarOpen && <span className="ml-3">Kelola Penugasan</span>}
+          </Link>
+        )}
+
+        {/* Menu Penugasan Saya - Untuk user dan admin_unit yang ditugaskan */}
+        {(userData?.role === "user" || userData?.role === "admin_unit") && (
+          <Link
+            to="/my-assignments"
+            className={`flex items-center w-full p-3 my-1 ${
+              location.pathname === "/my-assignments" ? "bg-blue-700" : ""
+            } rounded-lg transition-colors`}>
+            <FiClipboard size={20} />
+            {/* Text label hanya tampil saat sidebar expanded */}
+            {sidebarOpen && <span className="ml-3">Penugasan Saya</span>}
           </Link>
         )}
       </nav>

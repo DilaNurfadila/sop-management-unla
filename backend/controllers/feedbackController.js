@@ -42,9 +42,7 @@ const logFeedbackActivity = async (
       targetData?.id || null,
       targetData ? "feedback" : null
     );
-  } catch (error) {
-    console.error("Error logging feedback activity:", error.message);
-    // Tidak throw error agar tidak mengganggu flow utama
+  } catch (error) {// Tidak throw error agar tidak mengganggu flow utama
   }
 };
 
@@ -120,9 +118,7 @@ exports.createFeedback = async (req, res) => {
       message: "Feedback berhasil disimpan",
       data: result,
     });
-  } catch (error) {
-    console.error("Error creating feedback:", error);
-    res.status(500).json({ message: error.message });
+  } catch (error) {res.status(500).json({ message: error.message });
   }
 };
 
@@ -150,9 +146,7 @@ exports.getFeedbackBySopId = async (req, res) => {
         total_feedback: stats.total_feedback || 0,
       },
     });
-  } catch (error) {
-    console.error("Error fetching feedback:", error);
-    res.status(500).json({ message: error.message });
+  } catch (error) {res.status(500).json({ message: error.message });
   }
 };
 
@@ -192,9 +186,7 @@ exports.getAllFeedback = async (req, res) => {
 
     // Kirim response dengan data feedback yang sudah dilengkapi info uploader
     res.status(200).json(feedbackWithUploader);
-  } catch (error) {
-    console.error("Error fetching all feedback:", error);
-    res.status(500).json({ message: error.message });
+  } catch (error) {res.status(500).json({ message: error.message });
   }
 };
 
@@ -229,9 +221,7 @@ exports.deleteFeedback = async (req, res) => {
 
     // Kirim response sukses
     res.status(200).json({ message: "Feedback berhasil dihapus" });
-  } catch (error) {
-    console.error("Error deleting feedback:", error);
-    res.status(500).json({ message: error.message });
+  } catch (error) {res.status(500).json({ message: error.message });
   }
 };
 
@@ -293,8 +283,6 @@ exports.updateFeedback = async (req, res) => {
       message: "Feedback berhasil diperbarui",
       data: result,
     });
-  } catch (error) {
-    console.error("Error updating feedback:", error);
-    res.status(500).json({ message: error.message });
+  } catch (error) {res.status(500).json({ message: error.message });
   }
 };

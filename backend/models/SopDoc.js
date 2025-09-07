@@ -1,52 +1,79 @@
 // Import konfigurasi database connection pool
 const pool = require("../config/db");
+const {
+  STATUS,
+  REVIEW_STATUS,
+  VERSION_TYPE,
+} = require("../constants/sopStatus");
 
 /**
  * Class untuk mengelola operasi database SOP Documents
- * Menangani CRUD operations untuk dokumen SOP
+ * Menangani CRUD operations untuk dokumen SOP sesuai schema baru
  */
 class SopDoc {
   /**
-   * Constructor untuk membuat instance SopDoc
-   * @param {string} sopTitle - Judul dokumen SOP
+   * Constructor untuk membuat instance SopDoc sesuai struktur sop_documents baru
    * @param {string} sopCode - Kode unik dokumen SOP
-   * @param {string} sopVersion - Versi dokumen SOP
-   * @param {string} organization - Organisasi/unit pemilik dokumen
-   * @param {string} url - URL/path file dokumen
-   * @param {number} userId - ID pengguna yang upload dokumen
-   * @param {string} description - Deskripsi dokumen (opsional)
+   * @param {string} version - Versi dokumen SOP
+   * @param {string} title - Judul dokumen SOP
+   * @param {string} goals - Tujuan SOP (opsional)
+   * @param {string} scope - Ruang lingkup SOP (opsional)
+   * @param {string} unitScope - Ruang lingkup unit kerja SOP (opsional)
+   * @param {string} definition - Definisi/pengertian SOP (opsional)
+   * @param {string} sopReference - Referensi SOP (opsional)
+   * @param {string} procedureDescription - Deskripsi prosedur SOP (opsional)
    * @param {string} status - Status dokumen (draft, published, archived)
-   * @param {string} category - Kategori dokumen (opsional)
+   * @param {number} assignment_id - ID assignment untuk tracking SOP dari penugasan (opsional)
    */
   constructor(
-    sopTitle,
     sopCode,
-    sopVersion,
-    organization,
-    url,
-    userId,
-    description = null,
+    version,
+    title,
+    goals = null,
+    scope = null,
+    unitScope = null,
+    definition = null,
+    sopReference = null,
+    procedureDescription = null,
     status = "draft",
-    category = null
+    assignment_id = null
   ) {
-    // Menyimpan judul dokumen SOP
-    this.sop_title = sopTitle;
-    // Menyimpan kode unik dokumen untuk identifikasi
     this.sop_code = sopCode;
-    // Menyimpan versi dokumen untuk tracking revisi
-    this.sop_version = sopVersion;
-    // Menyimpan organisasi/unit pemilik dokumen
-    this.organization = organization;
-    // Menyimpan path/URL file dokumen di storage
-    this.url = url;
-    // Menyimpan ID pengguna yang mengupload dokumen
-    this.user_id = userId;
-    // Menyimpan deskripsi dokumen (opsional)
-    this.description = description;
-    // Menyimpan status dokumen (draft, published, archived)
+    this.version = version;
+    this.title = title;
+    this.title = title;
+    this.goals = goals;
+    this.scope = scope;
+    this.unit_scope = unitScope;
+    this.definition = definition;
+    this.sop_reference = sopReference;
+    this.procedure_description = procedureDescription;
     this.status = status;
-    // Menyimpan kategori dokumen untuk pengelompokan
-    this.category = category;
+    this.assignment_id = assignment_id;
+  }
+
+  /**
+   * Method untuk menyimpan dokumen SOP baru ke database
+   * @returns {Object} - Hasil insert dengan ID baru
+   */
+  async save() {
+    const [result] = await pool.query(
+      "INSERT INTO sop_documents (sop_code, version, title, goals, scope, unit_scope, definition, sop_reference, procedure_description, status, assignment_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        this.sop_code,
+        this.version,
+        this.title,
+        this.goals,
+        this.scope,
+        this.unit_scope,
+        this.definition,
+        this.sop_reference,
+        this.procedure_description,
+        this.status,
+        this.assignment_id,
+      ]
+    );
+    return { id: result.insertId, ...this };
   }
 
   /**
@@ -55,60 +82,63 @@ class SopDoc {
    * @returns {Object|null} - Object user atau null jika tidak ditemukan
    */
   static async getUserById(userId) {
-    // Jika userId tidak ada, langsung return null
     if (!userId) return null;
 
     try {
-      // Query database untuk mencari user berdasarkan ID
-      // Menggunakan destructuring untuk mengambil rows dari hasil query
       const [rows] = await pool.query(
-        "SELECT id, name, email FROM users WHERE id = ?", // Query SQL dengan placeholder - menggunakan 'name' bukan 'username'
-        [userId] // Parameter untuk mengganti placeholder (prepared statement)
+        "SELECT id, name, email FROM users WHERE id = ?",
+        [userId]
       );
-
-      // Return user pertama jika ada, atau null jika tidak ditemukan
       return rows[0] || null;
     } catch (error) {
-      // Log error ke console untuk debugging
-      console.error("Error fetching user:", error);
-      // Return null jika terjadi error
       return null;
     }
   }
 
   /**
-   * Helper method untuk menambahkan informasi uploader ke dokumen SOP
-   * @param {Object|Array} sopDocs - Dokumen SOP (single object atau array)
-   * @returns {Object|Array} - Dokumen SOP dengan informasi uploader
+   * Method untuk mengambil semua dokumen SOP dari database dengan filter permission
+   * Draft documents hanya terlihat oleh creator, published/approved terlihat semua
+   * @param {number} userId - ID user yang sedang login
+   * @param {string} userRole - Role user yang sedang login
+   * @returns {Array} - Array dokumen SOP dengan informasi uploader
    */
-  static async attachUploaderInfo(sopDocs) {
-    // Cek apakah sopDocs adalah array atau single object
-    if (!Array.isArray(sopDocs)) {
-      // Jika single document dan memiliki user_id
-      if (sopDocs && sopDocs.user_id) {
-        // Ambil informasi user berdasarkan user_id
-        const user = await this.getUserById(sopDocs.user_id);
-        // Tambahkan property uploader_name dan uploader_email ke dokumen
-        sopDocs.uploader_name = user?.name || null; // Gunakan optional chaining dengan 'name' bukan 'username'
-        sopDocs.uploader_email = user?.email || null;
-      }
-      // Return dokumen yang sudah dimodifikasi
-      return sopDocs;
+  static async findAllSopDocWithPermission(userId, userRole) {
+    let query = `
+      SELECT 
+        d.*,
+        COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
+        COALESCE(ar.approval_date, d.created_at) AS created_date,
+        'Universitas Langlangbuana' AS organization,
+        unit_scope_tbl.nama_unit AS unit_scope_name
+      FROM sop_documents d
+      LEFT JOIN sop_approval_roles ar 
+        ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+      LEFT JOIN users creator ON ar.user_id = creator.id
+      LEFT JOIN units unit_scope_tbl 
+        ON d.unit_scope = unit_scope_tbl.id
+      WHERE 
+    `;
+
+    let params = [];
+
+    if (userRole === "admin" || userRole === "admin_unit") {
+      // Admin dan admin_unit dapat melihat semua dokumen
+      query += `1 = 1`;
+    } else {
+      // User biasa hanya dapat melihat:
+      // 1. Draft documents yang mereka buat sendiri
+      // 2. HANYA Published documents dari siapapun (bukan unpublished/approved)
+      query += `
+        (d.status = 'draft' AND ar.user_id = ?) OR
+        (d.status = 'published')
+      `;
+      params.push(userId);
     }
 
-    // Jika sopDocs adalah array, loop melalui setiap dokumen
-    for (let doc of sopDocs) {
-      // Cek apakah dokumen memiliki user_id
-      if (doc.user_id) {
-        // Ambil informasi user untuk setiap dokumen
-        const user = await this.getUserById(doc.user_id);
-        // Tambahkan property uploader_name dan uploader_email
-        doc.uploader_name = user?.name || null; // Gunakan 'name' bukan 'username'
-        doc.uploader_email = user?.email || null;
-      }
-    }
-    // Return array dokumen yang sudah dimodifikasi
-    return sopDocs;
+    query += ` ORDER BY d.created_at DESC`;
+
+    const [rows] = await pool.query(query, params);
+    return rows;
   }
 
   /**
@@ -116,24 +146,66 @@ class SopDoc {
    * @returns {Array} - Array dokumen SOP dengan informasi uploader
    */
   static async findAllSopDoc() {
-    // Query database untuk mengambil semua dokumen SOP
-    const [rows] = await pool.query("SELECT * FROM sop_documents");
-    // Tambahkan informasi uploader ke setiap dokumen dan return
-    return await this.attachUploaderInfo(rows);
+    const [rows] = await pool.query(`
+      SELECT 
+        d.*,
+        COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
+        COALESCE(ar.approval_date, d.created_at) AS created_date,
+        'Universitas Langlangbuana' AS organization,
+        unit_scope_tbl.nama_unit AS unit_scope_name
+      FROM sop_documents d
+      LEFT JOIN sop_approval_roles ar 
+        ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+      LEFT JOIN users creator ON ar.user_id = creator.id
+      LEFT JOIN units unit_scope_tbl 
+        ON d.unit_scope = unit_scope_tbl.id
+      ORDER BY d.created_at DESC
+    `);
+    return rows;
+  }
+
+  /**
+   * Method untuk mengambil SOP dengan struktur query spesifik yang diinginkan
+   * @returns {Array} - Array SOP dengan format: id, title, creator, created_date
+   */
+  static async getAllSOPWithCreator() {
+    const [rows] = await pool.query(`
+      SELECT 
+        d.id, 
+        d.title, 
+        creator.name AS creator, 
+        ar.approval_date AS created_date
+      FROM sop_documents d
+      LEFT JOIN sop_approval_roles ar 
+        ON d.id = ar.sop_doc_id 
+        AND ar.role = 'Creator'
+      LEFT JOIN users creator ON ar.user_id = creator.id
+      ORDER BY d.created_at DESC
+    `);
+    return rows;
   }
 
   /**
    * Method untuk mengambil dokumen SOP yang sudah dipublikasi
-   * @returns {Array} - Array dokumen SOP published dengan informasi uploader
+   * @returns {Array} - Array dokumen SOP published
    */
   static async findPublishedSopDocs() {
-    // Query database untuk mengambil dokumen dengan status 'published'
-    // Diurutkan berdasarkan sop_code secara ascending
-    const [rows] = await pool.query(
-      "SELECT * FROM sop_documents WHERE status = 'published' ORDER BY sop_code ASC"
-    );
-    // Tambahkan informasi uploader ke dokumen published dan return
-    return await this.attachUploaderInfo(rows);
+    const [rows] = await pool.query(`
+      SELECT 
+        d.*,
+        COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
+        COALESCE(ar.approval_date, d.created_at) AS created_date,
+        unit_scope_tbl.nama_unit AS unit_scope_name
+      FROM sop_documents d
+      LEFT JOIN sop_approval_roles ar 
+        ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+      LEFT JOIN users creator ON ar.user_id = creator.id
+      LEFT JOIN units unit_scope_tbl 
+        ON d.unit_scope = unit_scope_tbl.id
+      WHERE d.status = 'published' 
+      ORDER BY d.sop_code ASC
+    `);
+    return rows;
   }
 
   /**
@@ -142,38 +214,177 @@ class SopDoc {
    * @returns {Object|null} - Dokumen SOP dengan informasi uploader atau null
    */
   static async findById(id) {
-    // Query database untuk mencari dokumen berdasarkan ID
     const [rows] = await pool.query(
-      "SELECT * FROM sop_documents WHERE id = ?", // SQL query dengan placeholder
-      [id] // Parameter ID untuk prepared statement
+      `SELECT 
+        d.*,
+        COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
+        approver_role.approval_date AS creation_date,
+        d.sop_applicable AS effective_date,
+        d.revision_date,
+        COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+        u.nama_unit AS unit_name,
+        u.kode_unit AS unit_code,
+        'Universitas Langlangbuana' AS organization,
+        d.unit_scope,
+        unit_scope_tbl.nama_unit AS unit_scope_name,
+        reviewer.id AS reviewer_id,
+        reviewer.name AS reviewer_name,
+        approver.id AS approver_id,
+        approver.name AS approver_name,
+        approver.position AS approver_position,
+        d.qr_checksum,
+        d.approved_by,
+        d.approval_date
+      FROM sop_documents d
+      LEFT JOIN sop_approval_roles ar 
+        ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+      LEFT JOIN users creator ON ar.user_id = creator.id
+      LEFT JOIN units u 
+        ON ar.unit_id = u.id
+      LEFT JOIN units unit_scope_tbl 
+        ON d.unit_scope = unit_scope_tbl.id
+      LEFT JOIN sop_approval_roles reviewer_role 
+        ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
+      LEFT JOIN users reviewer ON reviewer_role.user_id = reviewer.id
+      LEFT JOIN sop_approval_roles approver_role 
+        ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
+      LEFT JOIN users approver ON approver_role.user_id = approver.id
+      WHERE d.id = ?`,
+      [id]
     );
-    // Ambil dokumen pertama dari hasil query
-    const doc = rows[0];
-    // Jika dokumen ditemukan, tambahkan info uploader; jika tidak, return null
-    return doc ? await this.attachUploaderInfo(doc) : null;
+    return rows[0] || null;
+  }
+
+  /**
+   * Method untuk generate version SOP otomatis
+   * @param {string} sopTitle - Judul SOP yang akan dicek versionnya
+   * @param {string} versionType - 'major' atau 'minor', default 'minor'
+   * @returns {string} - Generated version
+   */
+  // static async generateVersion(sopTitle, versionType = "minor") {
+  //   try {
+  //     const [rows] = await pool.query(
+  //       `SELECT version FROM sop_documents
+  //         WHERE title = ?
+  //         ORDER BY CAST(SUBSTRING_INDEX(version, '.', 1) AS UNSIGNED) DESC,
+  //                  CAST(SUBSTRING_INDEX(version, '.', -1) AS UNSIGNED) DESC
+  //         LIMIT 1`,
+  //       [sopTitle]
+  //     );
+
+  //     if (rows.length === 0) {
+  //       return "1.0";
+  //     }
+
+  //     const lastVersion = rows[0].version;
+  //     const [major, minor] = lastVersion.split(".").map(Number);
+
+  //     if (versionType === "major") {
+  //       return `${major + 1}.0`;
+  //     } else {
+  //       return `${major}.${minor + 1}`;
+  //     }
+  //   } catch (error) {
+  //     return "1.0";
+  //   }
+  // }
+
+  /**
+   * Method untuk generate SOP Code berdasarkan unit user
+   * Format: SOP-{nomor_unit}/{kode_unit}/{MM}/{YYYY}/{sequence_number}
+   * @param {number} userId - ID user yang membuat SOP
+   * @returns {string} - Generated SOP Code
+   */
+  static async generateSopCode(userId) {
+    try {
+      const [userRows] = await pool.query(
+        `SELECT u.nomor_unit, u.kode_unit 
+          FROM users us 
+          LEFT JOIN units u ON us.unit = u.id 
+          WHERE us.id = ?`,
+        [userId]
+      );
+
+      if (!userRows[0]) {
+        throw new Error("User atau unit tidak ditemukan");
+      }
+
+      const { nomor_unit, kode_unit } = userRows[0];
+
+      const unitNumber = nomor_unit || "001";
+      const unitCode = kode_unit || "UNLA";
+
+      const now = new Date();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const year = now.getFullYear();
+
+      const [existingCount] = await pool.query(
+        `SELECT COUNT(*) as count 
+          FROM sop_documents 
+          WHERE sop_code LIKE ? 
+          AND MONTH(created_at) = ? 
+          AND YEAR(created_at) = ?`,
+        [`SOP-${unitNumber}/${unitCode}/${month}/${year}%`, month, year]
+      );
+
+      const sequenceNumber = String(existingCount[0].count + 1).padStart(
+        3,
+        "0"
+      );
+
+      const sopCode = `SOP-${unitNumber}/${unitCode}/${month}/${year}/${sequenceNumber}`;
+
+      return sopCode;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Method untuk approve SOP dan generate SOP Code
+   * @param {number} id - ID SOP yang akan di-approve
+   * @param {number} userId - ID user yang approve
+   * @returns {Object} - Updated SOP document
+   */
+  static async approveSop(id, userId) {
+    try {
+      const sopCode = await this.generateSopCode(userId);
+
+      const [result] = await pool.query(
+        `UPDATE sop_documents 
+          SET status = 'published', 
+              sop_code = ?, 
+              published_at = NOW()
+          WHERE id = ?`,
+        [sopCode, id]
+      );
+
+      if (result.affectedRows === 0) {
+        throw new Error("SOP tidak ditemukan");
+      }
+
+      return await this.findById(id);
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
    * Method untuk mencari dokumen SOP berdasarkan kode SOP
-   * @param {string} sop_code - Kode SOP yang akan dicari
+   * @param {string} sopCode - Kode SOP yang akan dicari
    * @param {number|null} excludeId - ID dokumen yang akan dikecualikan dari pencarian
    * @returns {Object|undefined} - Dokumen SOP pertama yang ditemukan
    */
-  static async findBySopCode(sop_code, excludeId = null) {
-    // Membuat query dasar untuk mencari berdasarkan sop_code
-    let query = "SELECT * FROM sop_documents WHERE sop_code = ?";
-    // Array parameter dimulai dengan sop_code
-    const params = [sop_code];
+  static async findBySopCode(sopCode, excludeId = null) {
+    let query = "SELECT *, unit_scope FROM sop_documents WHERE sop_code = ?";
+    const params = [sopCode];
 
-    // Jika ada excludeId, tambahkan kondisi untuk mengecualikan ID tersebut
     if (excludeId) {
-      query += " AND id != ?"; // Tambahkan kondisi WHERE
-      params.push(excludeId); // Tambahkan excludeId ke parameter
+      query += " AND id != ?";
+      params.push(excludeId);
     }
 
-    // Eksekusi query dengan parameter yang sudah disiapkan
     const [rows] = await pool.query(query, params);
-    // Return dokumen pertama yang ditemukan
     return rows[0];
   }
 
@@ -183,57 +394,134 @@ class SopDoc {
    * @returns {Object} - Hasil pembuatan dokumen dengan ID baru
    */
   static async createSopDoc(sopData) {
-    // Destructuring data dari parameter sopData
     const {
-      sop_code, // Kode SOP
-      sop_title, // Judul SOP
-      url, // URL file SOP di Firebase Storage
-      status = "draft", // Status dokumen (default: draft)
-      organization, // Organisasi/unit
-      sop_applicable, // Tanggal berlaku
-      sop_version, // Versi SOP
-      user_id, // ID user yang membuat dokumen
-    } = sopData;
-
-    // Cek apakah kode SOP sudah digunakan oleh dokumen lain
-    const existingDoc = await this.findBySopCode(sop_code);
-    if (existingDoc) {
-      // Jika sudah ada, lempar error
-      throw new Error("Kode SOP sudah digunakan oleh dokumen lain");
+      title,
+      goals,
+      scope,
+      unit_scope,
+      definition,
+      sop_reference,
+      procedure_description,
+      status = "draft",
+      assignment_id = null,
+      sop_code = null, // Will be generated after approval
+      version = "V.1.0",
+      user_id, // ID user yang membuat SOP
+      reviewer_id,
+      approver_id,
+    } = sopData; // Validasi required fields
+    if (!title) {
+      throw new Error("Judul SOP wajib diisi");
     }
 
-    // Pastikan sop_applicable memiliki nilai tanggal yang valid
-    // Jika tidak ada, gunakan tanggal hari ini dalam format YYYY-MM-DD
-    const validApplicableDate =
-      sop_applicable || new Date().toISOString().split("T")[0];
+    // Start transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
 
-    // Insert dokumen baru ke database
-    const [result] = await pool.query(
-      "INSERT INTO sop_documents (sop_code, sop_title, url, status, organization, sop_applicable, sop_version, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        sop_code, // Parameter 1: Kode SOP
-        sop_title, // Parameter 2: Judul SOP
-        url, // Parameter 3: URL file
-        status, // Parameter 4: Status dokumen
-        organization, // Parameter 5: Organisasi
-        validApplicableDate, // Parameter 6: Tanggal berlaku yang valid
-        sop_version, // Parameter 7: Versi SOP
-        user_id, // Parameter 8: ID user pembuat
-      ]
-    );
+    try {
+      // Create SOP document using constructor and save method
+      const sopDoc = new SopDoc(
+        sop_code, // null initially
+        version,
+        title,
+        goals,
+        scope,
+        unit_scope,
+        definition,
+        sop_reference,
+        procedure_description,
+        status,
+        assignment_id
+      ); // Save to database
+      const [result] = await connection.query(
+        "INSERT INTO sop_documents (sop_code, version, title, goals, scope, unit_scope, definition, sop_reference, procedure_description, status, assignment_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          sopDoc.sop_code,
+          sopDoc.version,
+          sopDoc.title,
+          sopDoc.goals,
+          sopDoc.scope,
+          sopDoc.unit_scope,
+          sopDoc.definition,
+          sopDoc.sop_reference,
+          sopDoc.procedure_description,
+          sopDoc.status,
+          sopDoc.assignment_id,
+        ]
+      );
 
-    // Cek apakah insert berhasil (affectedRows = 1 berarti 1 row berhasil diinsert)
-    if (result.affectedRows === 1) {
-      // Return object dengan ID yang baru dibuat dan data lainnya
+      const sopDocId = result.insertId; // Jika ada user_id, buat entry approval roles untuk Creator
+      if (user_id) {
+        // Get user dan unit info
+        const [userInfo] = await connection.query(
+          "SELECT name, unit FROM users WHERE id = ?",
+          [user_id]
+        );
+
+        if (userInfo.length > 0) {
+          const { unit: userUnit } = userInfo[0];
+
+          // Insert Creator role
+          await connection.query(
+            `INSERT INTO sop_approval_roles 
+             (sop_doc_id, role, user_id, unit_id, approval_date) 
+             VALUES (?, ?, ?, ?, NOW())`,
+            [sopDocId, "Creator", user_id, userUnit]
+          );
+        }
+
+        // Insert Reviewer role if provided
+        if (reviewer_id) {
+          const [reviewerInfo] = await connection.query(
+            "SELECT name, unit FROM users WHERE id = ?",
+            [reviewer_id]
+          );
+
+          if (reviewerInfo.length > 0) {
+            const { unit: reviewerUnit } = reviewerInfo[0];
+            await connection.query(
+              `INSERT INTO sop_approval_roles 
+               (sop_doc_id, role, user_id, unit_id) 
+               VALUES (?, ?, ?, ?)`,
+              [sopDocId, "Reviewer", reviewer_id, reviewerUnit]
+            );
+          }
+        }
+
+        // Insert Approver role if provided
+        if (approver_id) {
+          const [approverInfo] = await connection.query(
+            "SELECT name, unit FROM users WHERE id = ?",
+            [approver_id]
+          );
+
+          if (approverInfo.length > 0) {
+            const { unit: approverUnit } = approverInfo[0];
+            await connection.query(
+              `INSERT INTO sop_approval_roles 
+               (sop_doc_id, role, user_id, unit_id) 
+               VALUES (?, ?, ?, ?)`,
+              [sopDocId, "Approver", approver_id, approverUnit]
+            );
+          }
+        }
+      }
+
+      // Commit transaction
+      await connection.commit();
+
       return {
-        id: result.insertId, // ID auto-increment dari database
-        sop_code: sop_code, // Kode SOP yang baru dibuat
-        ...sopData, // Spread operator untuk menyertakan semua data asli
-        success: true, // Flag sukses
+        id: sopDocId,
+        ...sopDoc,
+        success: true,
       };
-    } else {
-      // Jika insert gagal, lempar error
-      throw new Error("Gagal menyimpan data");
+    } catch (error) {
+      // Rollback transaction on error
+      await connection.rollback();
+      throw error;
+    } finally {
+      // Release connection
+      connection.release();
     }
   }
 
@@ -244,40 +532,213 @@ class SopDoc {
    * @returns {Object} - Data dokumen yang sudah diupdate
    */
   static async updateSopDoc(id, sopData) {
-    // Destructuring data yang akan diupdate
     const {
-      sop_code, // Kode SOP baru
-      sop_title, // Judul SOP baru
-      url, // URL file baru
-      organization, // Organisasi baru
-      sop_applicable, // Tanggal berlaku baru
-      sop_version, // Versi SOP baru
+      sop_code,
+      title,
+      goals,
+      scope,
+      unit_scope,
+      definition,
+      sop_reference,
+      procedure_description,
+      reviewer_id,
+      approver_id,
+      version_type, // 'minor' atau 'major'
     } = sopData;
 
-    // Check for duplicate SOP code, excluding the current document
+    // Cek kode SOP unik
     const existingDoc = await this.findBySopCode(sop_code, id);
     if (existingDoc) {
       throw new Error("Kode SOP sudah digunakan oleh dokumen lain");
     }
 
-    await pool.query(
-      "UPDATE sop_documents SET sop_code = ?, sop_title = ?, url = ?, organization = ?, sop_applicable = ?, sop_version = ? WHERE id = ?",
-      [sop_code, sop_title, url, organization, sop_applicable, sop_version, id]
-    );
-    return { id, ...sopData };
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Ambil data SOP saat ini
+      const [currentDoc] = await connection.query(
+        "SELECT status, version, review_status, assignment_id FROM sop_documents WHERE id = ?",
+        [id]
+      );
+      if (currentDoc.length === 0)
+        throw new Error("Dokumen SOP tidak ditemukan");
+
+      let newVersion = currentDoc[0].version;
+      let newStatus = currentDoc[0].status;
+      let reviewStatus = null;
+
+      // Parse versi current
+      const versionWithoutPrefix = currentDoc[0].version.replace(/^V\./, "");
+      const currentVersionParts = versionWithoutPrefix.split(".");
+      const majorVersion = parseInt(currentVersionParts[0] || 1);
+      const minorVersion = parseInt(currentVersionParts[1] || 0);
+
+      // Tentukan versioning
+      if (version_type === "minor") {
+        if (currentDoc[0].review_status !== "approved") {
+          throw new Error(
+            "Minor versioning hanya bisa diterapkan pada SOP yang pernah disahkan"
+          );
+        }
+        newVersion = `V.${majorVersion}.${minorVersion + 1}`;
+        newStatus = "unpublished";
+        reviewStatus = "approved"; // reset review status minor
+      }
+
+      if (version_type === "major") {
+        if (currentDoc[0].review_status !== "approved") {
+          throw new Error(
+            "Major version hanya bisa diterapkan pada SOP yang sudah selesai"
+          );
+        }
+        // newVersion = `V.${majorVersion + 1}.0`;
+        newStatus = "draft";
+        reviewStatus = "major_pending";
+      }
+
+      // Update SOP
+      const updateQuery =
+        "UPDATE sop_documents SET sop_code = ?, version = ?, status = ?, title = ?, goals = ?, scope = ?, unit_scope = ?, definition = ?, sop_reference = ?, procedure_description = ?" +
+        (reviewStatus ? ", review_status = ?" : "") +
+        ", revision_date = NOW() WHERE id = ?";
+      const updateParams = [
+        sop_code,
+        newVersion,
+        newStatus,
+        title,
+        goals,
+        scope,
+        unit_scope,
+        definition,
+        sop_reference,
+        procedure_description,
+        ...(reviewStatus ? [reviewStatus] : []),
+        id,
+      ];
+      await connection.query(updateQuery, updateParams);
+
+      // Update reviewer & approver jika diberikan
+      if (reviewer_id || approver_id) {
+        await connection.query(
+          "DELETE FROM sop_approval_roles WHERE sop_doc_id = ? AND role IN ('Reviewer','Approver')",
+          [id]
+        );
+
+        if (reviewer_id) {
+          const [reviewerInfo] = await connection.query(
+            "SELECT unit FROM users WHERE id = ?",
+            [reviewer_id]
+          );
+          if (reviewerInfo.length > 0) {
+            await connection.query(
+              "INSERT INTO sop_approval_roles (sop_doc_id, role, user_id, unit_id) VALUES (?, 'Reviewer', ?, ?)",
+              [id, reviewer_id, reviewerInfo[0].unit]
+            );
+          }
+        }
+
+        if (approver_id) {
+          const [approverInfo] = await connection.query(
+            "SELECT unit FROM users WHERE id = ?",
+            [approver_id]
+          );
+          if (approverInfo.length > 0) {
+            await connection.query(
+              "INSERT INTO sop_approval_roles (sop_doc_id, role, user_id, unit_id) VALUES (?, 'Approver', ?, ?)",
+              [id, approver_id, approverInfo[0].unit]
+            );
+          }
+        }
+      }
+
+      await connection.commit();
+      connection.release();
+
+      // Kembalikan data terbaru
+      return await this.findById(id);
+    } catch (error) {
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
   }
 
   static async publishSopDoc(id) {
+    // Start transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Cek apakah ada major revision pending
+      const [currentDoc] = await connection.query(
+        "SELECT version, review_status, status FROM sop_documents WHERE id = ?",
+        [id]
+      );
+
+      let newVersion = currentDoc[0].version;
+      let newStatus = STATUS.PUBLISHED; // Default: langsung published
+      let newReviewStatus = REVIEW_STATUS.APPROVED;
+
+      // Jika ada major revision pending, naikan versi major dan kembali ke unpublished untuk review
+      if (currentDoc[0].review_status === REVIEW_STATUS.MAJOR_PENDING) {
+        const versionWithoutPrefix = currentDoc[0].version.replace(/^V\./, "");
+        const currentVersionParts = versionWithoutPrefix.split(".");
+        const majorVersion = parseInt(currentVersionParts[0] || 1);
+
+        // Naikan major version, reset minor ke 0
+        newVersion = `V.${majorVersion + 1}.0`;
+
+        // 🔧 PERBAIKAN: Major revision → unpublished untuk review ulang
+        newStatus = STATUS.UNPUBLISHED;
+        newReviewStatus = REVIEW_STATUS.SUBMITTED_FOR_REVIEW;
+      } else {
+        throw new Error(
+          `📉 Normal publish: status → published (no major revision pending)`
+        );
+      }
+
+      // Update status, version, dan review_status
+      const updateQuery =
+        "UPDATE sop_documents SET status = ?, version = ?, published_at = NOW(), review_status = ? WHERE id = ?";
+      const updateParams = [newStatus, newVersion, newReviewStatus, id];
+
+      const [updateResult] = await connection.query(updateQuery, updateParams);
+
+      // Verify the publish by checking the database
+      const [verifyDoc] = await connection.query(
+        "SELECT status, version, review_status FROM sop_documents WHERE id = ?",
+        [id]
+      );
+
+      await connection.commit();
+      connection.release();
+      return true;
+    } catch (error) {
+      console.error(`❌ Error publishing SOP ${id}:`, error);
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
+  }
+
+  static async unpublishSopDoc(id) {
     await pool.query("UPDATE sop_documents SET status = ? WHERE id = ?", [
-      "published",
+      "unpublished",
       id,
     ]);
     return true;
   }
 
-  static async unpublishSopDoc(id) {
+  /**
+   * Method untuk mengupdate status dokumen SOP
+   * @param {number} id - ID dokumen yang akan diupdate
+   * @param {string} status - Status baru (draft, published, archived)
+   * @returns {boolean} - True jika berhasil
+   */
+  static async updateStatus(id, status) {
     await pool.query("UPDATE sop_documents SET status = ? WHERE id = ?", [
-      "draft",
+      status,
       id,
     ]);
     return true;
@@ -286,6 +747,407 @@ class SopDoc {
   static async delete(id) {
     await pool.query("DELETE FROM sop_documents WHERE id = ?", [id]);
     return true;
+  }
+
+  /**
+   * Method untuk mengambil SOP berdasarkan unit kerja pengguna
+   * Pengecualian: Admin dapat melihat semua SOP
+   * @param {number} userId - ID user yang unit kerjanya akan dijadikan filter
+   * @returns {Array} - Array SOP yang sesuai dengan unit kerja user (atau semua SOP jika admin)
+   */
+  static async findByUserUnit(userId) {
+    try {
+      const [userCheck] = await pool.query(
+        `
+        SELECT * FROM users WHERE id = ?
+      `,
+        [userId]
+      );
+      if (!userCheck.length) {
+        throw new Error("User tidak ditemukan");
+      }
+
+      const { role } = userCheck[0];
+      if (role === "admin") {
+        const [rows] = await pool.query(`
+          SELECT DISTINCT 
+            d.id,
+            d.sop_code,
+            d.version,
+            d.title,
+            d.goals,
+            d.scope,
+            d.unit_scope,
+            unit_scope_tbl.nama_unit AS unit_scope_name,
+            d.definition,
+            d.sop_reference,
+            d.procedure_description,
+            d.status,
+            d.review_status,
+            d.created_at,
+            d.updated_at,
+            d.sop_applicable,
+            d.approval_date,
+            creator.name AS uploader_name,
+            ar.user_id AS uploader_id,
+            ar.user_id AS creator_id,
+            NULL AS assignment_id, -- Untuk kompatibilitas dengan assignment system
+            approver_role.approval_date AS creation_date,
+            d.sop_applicable AS effective_date,
+            d.revision_date,
+            COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+            u.kode_unit,
+            u.nomor_unit
+          FROM sop_documents d
+          LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+          LEFT JOIN users creator ON ar.user_id = creator.id
+          LEFT JOIN units u ON ar.unit_id = u.id
+          LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+          LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
+          LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
+          WHERE 1 = 1
+          ORDER BY d.created_at DESC
+        `);
+        return rows;
+      }
+
+      if (role === "admin_unit") {
+        const userUnit = userCheck[0].unit;
+        const [rows] = await pool.query(
+          `
+          SELECT DISTINCT 
+            d.id,
+            d.sop_code,
+            d.version,
+            d.title,
+            d.goals,
+            d.scope,
+            d.unit_scope,
+            unit_scope_tbl.nama_unit AS unit_scope_name,
+            d.definition,
+            d.sop_reference,
+            d.procedure_description,
+            d.status,
+            d.review_status,
+            d.created_at,
+            d.updated_at,
+            d.sop_applicable,
+            d.approval_date,
+            creator.name AS uploader_name,
+            ar.user_id AS uploader_id,
+            ar.user_id AS creator_id,
+            NULL AS assignment_id, -- Untuk kompatibilitas dengan assignment system
+            approver_role.approval_date AS creation_date,
+            d.sop_applicable AS effective_date,
+            d.revision_date,
+            COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+            u.kode_unit,
+            u.nomor_unit
+          FROM sop_documents d
+          LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+          LEFT JOIN users creator ON ar.user_id = creator.id
+          LEFT JOIN units u ON ar.unit_id = u.id
+          LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+          LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
+          LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
+          WHERE d.unit_scope = ?
+          ORDER BY d.created_at DESC
+        `,
+          [userUnit]
+        );
+        return rows;
+      }
+      const userUnit = userCheck[0].unit;
+      const [rows] = await pool.query(
+        `
+        SELECT DISTINCT 
+          d.id,
+          d.sop_code,
+          d.version,
+          d.title,
+          d.goals,
+          d.scope,
+          d.unit_scope,
+          unit_scope_tbl.nama_unit AS unit_scope_name,
+          d.definition,
+          d.sop_reference,
+          d.procedure_description,
+          d.status,
+          d.review_status,
+          d.created_at,
+          d.updated_at,
+          d.sop_applicable,
+          d.approval_date,
+          COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
+          ar.user_id AS uploader_id,
+          ar.user_id AS creator_id,
+          NULL AS assignment_id, -- Untuk kompatibilitas dengan assignment system
+          approver_role.approval_date AS creation_date,
+          d.sop_applicable AS effective_date,
+            d.revision_date,
+          COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+          u.kode_unit,
+          u.nomor_unit
+        FROM sop_documents d
+        LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+        LEFT JOIN users creator ON ar.user_id = creator.id
+        LEFT JOIN units u ON ar.unit_id = u.id
+        LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+        LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
+        LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
+        WHERE 
+          (
+            (d.unit_scope = ? OR d.unit_scope IS NULL) AND d.status = 'published'
+          ) OR 
+          (
+            ar.user_id = ?
+          )
+        ORDER BY d.created_at DESC
+      `,
+        [userUnit, userId]
+      );
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Method alternatif untuk mengambil SOP berdasarkan unit kerja pengguna (lebih sederhana)
+   * @param {number} unitId - ID unit kerja
+   * @returns {Array} - Array SOP yang sesuai dengan unit kerja
+   */
+  static async findByUnit(unitId) {
+    try {
+      const [rows] = await pool.query(
+        `
+        SELECT DISTINCT 
+          d.id,
+          d.sop_code,
+          d.version,
+          d.title,
+          d.goals,
+          d.scope,
+          d.unit_scope,
+          unit_scope_tbl.nama_unit AS unit_scope_name,
+          d.definition,
+          d.sop_reference,
+          d.procedure_description,
+          d.status,
+          d.created_at,
+          d.updated_at,
+          d.sop_applicable,
+          creator.name AS uploader_name,
+          approver_role.approval_date AS creation_date,
+          d.sop_applicable AS effective_date,
+            d.revision_date,
+          COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+          u.nama_unit AS organization,
+          u.kode_unit,
+          u.nomor_unit
+        FROM sop_documents d
+        JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id
+        JOIN users creator ON ar.user_id = creator.id
+        JOIN units u ON ar.unit_id = u.id
+        LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+        LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
+        LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
+        WHERE ar.role = 'Creator'
+          AND u.id = ?
+          AND d.status IN ('draft', 'published')
+        ORDER BY d.created_at DESC
+      `,
+        [unitId]
+      );
+
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Method untuk mengambil SOP berdasarkan nama unit
+   * @param {string} unitName - Nama unit kerja
+   * @returns {Array} - Array SOP yang sesuai dengan unit kerja
+   */
+  static async findByUnitName(unitName) {
+    try {
+      const [rows] = await pool.query(
+        `
+        SELECT DISTINCT 
+          d.id, 
+          d.title,
+          d.sop_code,
+          d.version,
+          d.goals,
+          d.scope,
+          d.unit_scope,
+          unit_scope_tbl.nama_unit AS unit_scope_name,
+          d.definition,
+          d.sop_reference,
+          d.procedure_description,
+          d.status,
+          d.created_at,
+          d.updated_at,
+          d.sop_applicable,
+          creator.name AS uploader_name,
+          -- Tanggal Pembuatan: Kapan disahkan oleh Approver
+          approver_role.approval_date AS creation_date,
+          -- Tanggal Efektif: Dari kolom sop_applicable (diatur oleh pengesah)
+          d.sop_applicable AS effective_date,
+          -- Tanggal Revisi: Hanya tampilkan jika ada permintaan revisi yang selesai
+            -- FIXME: Logic lama salah, ganti dengan NULL sampai ada sistem revisi proper
+            d.revision_date,
+          -- Fallback untuk kompatibilitas (gunakan creation_date sebagai created_date)
+          COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+          u.nama_unit AS organization,
+          u.kode_unit,
+          u.nomor_unit,
+          u.nama_unit AS unit_penyusun
+        FROM sop_documents d
+        JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id
+        JOIN users creator ON ar.user_id = creator.id
+        JOIN units u ON ar.unit_id = u.id
+        LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+        LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
+        LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
+        WHERE ar.role = 'Creator'
+          AND u.nama_unit = ?
+          AND d.status IN ('draft', 'published')
+        ORDER BY d.created_at DESC
+      `,
+        [unitName]
+      );
+
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Method untuk mengambil SOP berdasarkan unit dan status tertentu (untuk keperluan assignment)
+   * @param {number} unitId - ID unit kerja (BUKAN nama unit!)
+   * @param {string} status - Status SOP (contoh: 'approved')
+   * @returns {Array} - Array SOP yang sesuai dengan unit kerja dan status
+   */
+  static async findByUnitAndStatus(unitId, status) {
+    try {
+      const query = `
+        SELECT DISTINCT 
+          d.id,
+          d.sop_code,
+          d.version,
+          d.title,
+          d.goals,
+          d.scope,
+          d.unit_scope,
+          unit_scope_tbl.nama_unit AS unit_scope_name,
+          d.definition,
+          d.sop_reference,
+          d.procedure_description,
+          d.status,
+          d.review_status,
+          d.created_at,
+          d.updated_at,
+          d.sop_applicable,
+          creator.name AS uploader_name
+        FROM sop_documents d
+        LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+        LEFT JOIN users creator ON ar.user_id = creator.id
+        LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+        WHERE d.unit_scope = ? 
+        AND d.review_status = ?
+        ORDER BY d.created_at DESC
+        `;
+
+      const [rows] = await pool.query(query, [unitId, status]);
+
+      return rows;
+    } catch (error) {
+      console.error("Error in findByUnitAndStatus:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Method untuk mengambil semua SOP yang sudah approved (untuk admin biasa)
+   * @returns {Array} - Array semua SOP yang sudah approved
+   */
+  static async findAllApprovedSops() {
+    try {
+      const query = `
+        SELECT DISTINCT 
+          d.id,
+          d.sop_code,
+          d.version,
+          d.title,
+          d.goals,
+          d.scope,
+          d.unit_scope,
+          unit_scope_tbl.nama_unit AS unit_scope_name,
+          d.definition,
+          d.sop_reference,
+          d.procedure_description,
+          d.status,
+          d.review_status,
+          d.created_at,
+          d.updated_at,
+          d.sop_applicable,
+          creator.name AS uploader_name
+        FROM sop_documents d
+        LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
+        LEFT JOIN users creator ON ar.user_id = creator.id
+        LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+        WHERE d.review_status = 'approved'
+        ORDER BY d.created_at DESC
+        `;
+
+      const [rows] = await pool.query(query);
+
+      return rows;
+    } catch (error) {
+      console.error("Error in findAllApprovedSops:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mendapatkan dokumen SOP berdasarkan ID
+   * @param {number} id - ID dokumen yang dicari
+   * @returns {Promise<Object|null>} Object data dokumen atau null jika tidak ditemukan
+   */
+  static async getSopDocById(id) {
+    try {
+      const [rows] = await pool.query(
+        `SELECT * FROM sop_documents WHERE id = ?`,
+        [id]
+      );
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error("Error in getSopDocById:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update status dokumen SOP
+   * @param {number} id - ID dokumen yang akan diupdate
+   * @param {string} status - Status baru (draft, review, published, archived)
+   * @returns {Promise<Object>} Result dari operasi update
+   */
+  static async updateSopStatus(id, status) {
+    try {
+      const [result] = await pool.query(
+        `UPDATE sop_documents SET status = ?, updated_at = NOW() WHERE id = ?`,
+        [status, id]
+      );
+      return result;
+    } catch (error) {
+      console.error("Error in updateSopStatus:", error);
+      throw error;
+    }
   }
 }
 

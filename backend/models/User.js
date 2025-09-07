@@ -16,7 +16,15 @@ class User {
    * @param {string} role - Role pengguna (admin, moderator, user)
    * @param {boolean} emailVerified - Status verifikasi email (default: false)
    */
-  constructor(name, email, password, position, unit, role = "user", emailVerified = false) {
+  constructor(
+    name,
+    email,
+    password,
+    position,
+    unit,
+    role = "user",
+    emailVerified = false
+  ) {
     // Menyimpan nama lengkap pengguna
     this.name = name;
     // Menyimpan alamat email pengguna (sebagai identifier unik)
@@ -164,6 +172,89 @@ class User {
       "SELECT * FROM users WHERE name LIKE ? OR email LIKE ?",
       [`%${query}%`, `%${query}%`]
     );
+    return rows;
+  }
+
+  /**
+   * Function untuk mengambil pengguna berdasarkan unit kerja
+   * @param {number} unitId - ID unit kerja
+   * @returns {Promise<Array>} - Array berisi user dalam unit tersebut
+   */
+  static async findByUnit(unitId) {
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.position,
+        u.role,
+        u.unit,
+        un.nama_unit,
+        un.kode_unit,
+        u.created_at
+      FROM users u
+      LEFT JOIN units un ON u.unit = un.id
+      WHERE u.unit = ?
+      ORDER BY u.name ASC
+    `,
+      [unitId]
+    );
+    return rows;
+  }
+
+  /**
+   * Function untuk mengambil pengguna berdasarkan unit kerja admin yang login
+   * @param {number} adminUserId - ID admin yang login
+   * @returns {Promise<Array>} - Array berisi user dalam unit yang sama dengan admin
+   */
+  static async findByAdminUnit(adminUserId) {
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.position,
+        u.role,
+        u.unit,
+        un.nama_unit as unit_name,
+        un.kode_unit,
+        u.created_at
+      FROM users u
+      LEFT JOIN units un ON u.unit = un.id
+      WHERE u.unit = (
+        SELECT unit FROM users WHERE id = ?
+      )
+      AND u.id != ?
+      ORDER BY u.name ASC
+    `,
+      [adminUserId, adminUserId]
+    );
+    return rows;
+  }
+
+  /**
+   * Function untuk mengambil semua pengguna dengan info unit (untuk admin penuh)
+   * @returns {Promise<Array>} - Array berisi semua user dengan info unit
+   */
+  static async findAllUsersWithUnit() {
+    const [rows] = await pool.query(`
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.position,
+        u.role,
+        u.unit,
+        un.nama_unit as unit_name,
+        un.kode_unit,
+        u.created_at
+      FROM users u
+      LEFT JOIN units un ON u.unit = un.id
+      WHERE u.role != 'admin'
+      ORDER BY un.nama_unit ASC, u.name ASC
+    `);
     return rows;
   }
 }

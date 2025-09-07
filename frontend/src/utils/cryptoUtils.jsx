@@ -2,15 +2,26 @@
 import crypto from "crypto-js";
 
 /**
- * Function helper untuk mengambil user data dari sessionStorage
- * @returns {string|null} - Raw user data string dari sessionStorage
+ * Function helper untuk mengambil user data dari localStorage
+ * @returns {string|null} - Raw user data string dari localStorage
  */
 export const getUserDataFromStorage = () => {
   try {
-    // Prioritas utama dari sessionStorage (lebih aman dan sesuai implementasi login)
-    return sessionStorage.getItem("user");
+    // Cek localStorage untuk userData (sesuai dengan implementasi login)
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      return JSON.parse(userData);
+    }
+
+    // Fallback ke sessionStorage untuk kompatibilitas
+    const sessionData = sessionStorage.getItem("user");
+    if (sessionData) {
+      return JSON.parse(sessionData);
+    }
+
+    return null;
   } catch (error) {
-    console.error("Error accessing sessionStorage:", error);
+    console.error("Error accessing storage:", error);
     return null;
   }
 };
@@ -34,7 +45,6 @@ export const decryptData = (encryptedData) => {
   try {
     // Cek apakah VITE_SECRET_KEY tersedia
     if (!import.meta.env.VITE_SECRET_KEY) {
-      console.warn("VITE_SECRET_KEY not found, returning original data");
       return encryptedData;
     }
 
@@ -46,13 +56,11 @@ export const decryptData = (encryptedData) => {
 
     // Validasi bahwa kedua bagian ada dan memiliki panjang yang wajar
     if (!ivHex || !cipherText || ivHex.length < 16 || cipherText.length < 8) {
-      console.warn("Invalid encrypted data format, returning original");
       return encryptedData;
     }
 
     // Validasi format hex untuk IV
     if (!/^[0-9a-fA-F]+$/.test(ivHex)) {
-      console.warn("Invalid IV format, returning original");
       return encryptedData;
     }
 
@@ -64,7 +72,6 @@ export const decryptData = (encryptedData) => {
 
     // Validasi hasil dekripsi sebelum konversi ke UTF-8
     if (bytes.sigBytes <= 0) {
-      console.warn("Decryption resulted in empty data, returning original");
       return encryptedData;
     }
 
@@ -73,7 +80,6 @@ export const decryptData = (encryptedData) => {
 
     // Validasi hasil dekripsi tidak kosong
     if (!decryptedText || decryptedText.trim() === "") {
-      console.warn("Decryption resulted in empty string, returning original");
       return encryptedData;
     }
 
@@ -179,7 +185,6 @@ export const encryptUserData = (userData) => {
       updated_at: userData.updated_at,
     };
 
-    console.log("User data encrypted successfully");
     return encryptedUser;
   } catch (error) {
     console.error("Failed to encrypt user data:", error);
@@ -207,11 +212,9 @@ export const isEncrypted = (data) => {
 export const clearCorruptedUserData = () => {
   try {
     sessionStorage.removeItem("user");
-    console.log("Corrupted user data cleared from sessionStorage");
 
     // Re-enable auto-redirect after fixing encryption compatibility
     if (typeof window !== "undefined" && window.location) {
-      console.log("Redirecting to login due to corrupted data...");
       // Add small delay to ensure console log is visible
       setTimeout(() => {
         window.location.href = "/login";
@@ -232,7 +235,6 @@ export const updateUserDataInStorage = (updatedData) => {
     // Ambil data user saat ini dari sessionStorage
     const currentUser = getSafeUserDataNoRedirect();
     if (!currentUser) {
-      console.error("No current user data found in storage");
       return false;
     }
 
@@ -246,11 +248,7 @@ export const updateUserDataInStorage = (updatedData) => {
       updated_at: currentUser.updated_at,
     };
 
-    console.log("Merging user data:", {
-      currentUser,
-      updatedData,
-      mergedUserData,
-    });
+    // (debug log removed)
 
     // Enkripsi data yang sudah dimerge
     const encryptedUserData = encryptUserData(mergedUserData);
@@ -258,57 +256,10 @@ export const updateUserDataInStorage = (updatedData) => {
     // Simpan kembali ke sessionStorage
     sessionStorage.setItem("user", JSON.stringify(encryptedUserData));
 
-    console.log("User data updated and encrypted in sessionStorage");
     return true;
   } catch (error) {
     console.error("Error updating user data in storage:", error);
     return false;
-  }
-};
-
-/**
- * Function untuk debug dan inspect user data di sessionStorage
- */
-export const debugUserData = () => {
-  try {
-    console.log("=== DEBUG USER DATA ===");
-    const userStr = getUserDataFromStorage();
-    console.log("Raw user data in sessionStorage:", userStr);
-
-    if (userStr) {
-      const userData = JSON.parse(userStr);
-
-      // Test dekripsi untuk setiap field
-      if (userData.email?.includes(":")) {
-        console.log("Testing decryption:");
-        console.log("- Email decrypt result:", decryptData(userData.email));
-        if (userData.name?.includes(":")) {
-          console.log("- Name decrypt result:", decryptData(userData.name));
-        }
-        if (userData.role?.includes(":")) {
-          console.log("- Role decrypt result:", decryptData(userData.role));
-        }
-      } else {
-        console.log("Data appears to be non-encrypted");
-      }
-
-      // Test getSafeUserData
-      console.log("getSafeUserData result:", getSafeUserData());
-    }
-
-    // Check environment
-    console.log(
-      "VITE_SECRET_KEY available:",
-      !!import.meta.env.VITE_SECRET_KEY
-    );
-    console.log(
-      "VITE_SECRET_KEY length:",
-      import.meta.env.VITE_SECRET_KEY?.length
-    );
-
-    console.log("=== END DEBUG ===");
-  } catch (error) {
-    console.error("Error debugging user data:", error);
   }
 };
 
@@ -318,15 +269,14 @@ export const debugUserData = () => {
  */
 export const getSafeUserDataNoRedirect = () => {
   try {
-    const userStr = getUserDataFromStorage();
-    if (!userStr) return null;
-
-    const userData = JSON.parse(userStr);
+    const userData = getUserDataFromStorage();
     if (!userData) return null;
+
+    // userData sudah dalam bentuk object dari getUserDataFromStorage
+    // Tidak perlu JSON.parse lagi
 
     // Cek apakah data sudah dalam format yang benar
     if (!userData.email) {
-      console.warn("Invalid user data structure");
       return null;
     }
 
@@ -348,13 +298,6 @@ export const getSafeUserDataNoRedirect = () => {
           testDecrypt === userData.email ||
           testDecrypt.includes(":")
         ) {
-          console.warn(
-            "Decryption test failed, but keeping data for manual intervention"
-          );
-          console.warn(
-            "Use window.clearCorruptedDataSilent() to clear manually if needed"
-          );
-
           // Return data mentah untuk troubleshooting (jangan hapus otomatis)
           return {
             id: userData.id || null,
@@ -374,8 +317,6 @@ export const getSafeUserDataNoRedirect = () => {
         return decryptedUser;
       } catch (decryptError) {
         console.error("Decryption error:", decryptError);
-        console.warn("Keeping data for manual troubleshooting");
-
         // Return fallback data tanpa hapus sessionStorage
         return {
           id: userData.id || null,
@@ -389,8 +330,6 @@ export const getSafeUserDataNoRedirect = () => {
         };
       }
     } else {
-      console.log("Detected plain text data, using as-is");
-      // Data sudah plain text (sudah didekripsi sebelumnya), return as is
       return {
         id: userData.id || null,
         email: userData.email || "",
@@ -424,7 +363,6 @@ export const getSafeUserData = () => {
 
     // Cek apakah data sudah dalam format yang benar
     if (!userData.email) {
-      console.warn("Invalid user data structure, clearing localStorage");
       clearCorruptedUserData();
       return null;
     }
@@ -441,7 +379,6 @@ export const getSafeUserData = () => {
 
       // Jika hasil dekripsi masih mengandung ':', kemungkinan data corrupted
       if (testDecrypt && testDecrypt.includes(":")) {
-        console.warn("Decryption test failed, data appears corrupted");
         clearCorruptedUserData();
         return null;
       }
@@ -455,14 +392,12 @@ export const getSafeUserData = () => {
         !decryptedUser.email ||
         decryptedUser.email.includes(":")
       ) {
-        console.warn("Full decryption failed, clearing localStorage");
         clearCorruptedUserData();
         return null;
       }
 
       return decryptedUser;
     } else {
-      console.log("Detected non-encrypted data, using as-is");
       // Data tidak terenkripsi, return as is dengan normalisasi
       return {
         id: userData.id || null,
@@ -482,182 +417,3 @@ export const getSafeUserData = () => {
     return null;
   }
 };
-
-// Export ke window untuk debugging dari console (setelah semua function didefinisikan)
-if (typeof window !== "undefined") {
-  window.debugUserData = debugUserData;
-  window.clearCorruptedUserData = clearCorruptedUserData;
-  window.getSafeUserData = getSafeUserData;
-  window.updateUserDataInStorage = updateUserDataInStorage;
-
-  // Function untuk debug data flow dari login sampai storage
-  window.debugDataFlow = () => {
-    console.log("=== DATA FLOW DEBUG ===");
-
-    // 1. Check sessionStorage content
-    const rawStorage = sessionStorage.getItem("user");
-    console.log("1. Raw sessionStorage content:", rawStorage);
-
-    if (rawStorage) {
-      try {
-        // 2. Parse data
-        const parsed = JSON.parse(rawStorage);
-        console.log("2. Parsed data:", parsed);
-
-        // 3. Check if data is encrypted or plain text
-        const isEncrypted =
-          parsed.email &&
-          typeof parsed.email === "string" &&
-          parsed.email.includes(":");
-        console.log("3. Is data encrypted?", isEncrypted);
-
-        if (isEncrypted) {
-          console.log("   Data contains encrypted fields");
-          console.log("   Sample encrypted email:", parsed.email);
-        } else {
-          console.log("   Data is plain text");
-          console.log("   Sample plain email:", parsed.email);
-        }
-
-        // 4. Test getSafeUserDataNoRedirect
-        const safeData = getSafeUserDataNoRedirect();
-        console.log("4. getSafeUserDataNoRedirect result:", safeData);
-      } catch (e) {
-        console.error("2. Parse error:", e);
-      }
-    } else {
-      console.log("No user data in sessionStorage");
-    }
-
-    console.log("=== END DATA FLOW DEBUG ===");
-  };
-  window.testSecretKey = () => {
-    const key = import.meta.env.VITE_SECRET_KEY;
-    console.log("Frontend SECRET_KEY:", key);
-    console.log("Key length:", key?.length);
-
-    // Test enkripsi/dekripsi
-    const testData = "test@example.com";
-    const encrypted = encryptData(testData);
-    const decrypted = decryptData(encrypted);
-
-    console.log("Test data:", testData);
-    console.log("Encrypted:", encrypted);
-    console.log("Decrypted:", decrypted);
-    console.log("Round-trip success:", testData === decrypted);
-  };
-
-  // Function untuk check apakah backend dan frontend key cocok
-  window.checkBackendKeyCompatibility = () => {
-    const userData = getUserDataFromStorage();
-    if (!userData) {
-      console.log("No user data in storage to test");
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(userData);
-      console.log("Current user data structure:", parsed);
-
-      if (parsed.email?.includes(":")) {
-        console.log("Data appears encrypted, testing decryption...");
-        const decrypted = decryptData(parsed.email);
-        console.log("Decryption result:", decrypted);
-        console.log(
-          "Success:",
-          !decrypted.includes(":") && decrypted !== parsed.email
-        );
-      } else {
-        console.log("Data appears to be plain text");
-      }
-    } catch (e) {
-      console.error("Error parsing user data:", e);
-    }
-  };
-
-  // Function untuk clear data corrupted tanpa redirect
-  window.clearCorruptedDataSilent = () => {
-    try {
-      sessionStorage.removeItem("user");
-      console.log("Corrupted user data cleared silently from sessionStorage");
-    } catch (error) {
-      console.error("Error clearing sessionStorage:", error);
-    }
-  };
-
-  // Manual clear function tanpa redirect
-  window.manualClearUserData = () => {
-    try {
-      sessionStorage.removeItem("user");
-      console.log("User data manually cleared from sessionStorage");
-    } catch (error) {
-      console.error("Error manually clearing sessionStorage:", error);
-    }
-  };
-
-  // Force refresh function
-  window.forceRefresh = () => {
-    window.location.reload();
-  };
-
-  // Test login function
-  window.testLogin = async () => {
-    try {
-      const response = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          email: "test@example.com",
-          password: "password123",
-        }),
-      });
-
-      const data = await response.json();
-      console.log("Login test response:", data);
-
-      if (data.user) {
-        localStorage.setItem("user", JSON.stringify(data.user));
-        console.log("User data saved to localStorage");
-        window.debugUserData();
-      }
-    } catch (error) {
-      console.error("Test login error:", error);
-    }
-  };
-
-  // Test update user data function
-  window.testUpdateUserData = () => {
-    console.log("=== TEST UPDATE USER DATA ===");
-
-    // Get current user data
-    const currentUser = getSafeUserDataNoRedirect();
-    console.log("1. Current user data:", currentUser);
-
-    if (!currentUser) {
-      console.log("No user data found, cannot test update");
-      return;
-    }
-
-    // Test update with sample data
-    const updateData = {
-      name: "Updated Name Test",
-      position: "Updated Position Test",
-      unit: "Updated Unit Test",
-    };
-
-    console.log("2. Update data:", updateData);
-
-    // Perform update
-    const success = updateUserDataInStorage(updateData);
-    console.log("3. Update success:", success);
-
-    // Verify update
-    const updatedUser = getSafeUserDataNoRedirect();
-    console.log("4. Updated user data:", updatedUser);
-
-    console.log("=== END TEST UPDATE ===");
-  };
-}

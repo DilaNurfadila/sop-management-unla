@@ -21,6 +21,7 @@ export const getAllArchived = async () => {
     const response = await archiveApi.get("/");
     return response.data;
   } catch (error) {
+    console.error("Archive API Error:", error.response?.data || error.message);
     throw error.response?.data || error;
   }
 };
@@ -34,6 +35,9 @@ export const getArchivedVersions = async (sopId) => {
     throw error.response?.data || error;
   }
 };
+
+// Alias untuk backward compatibility
+export const getArchivedVersionsBySopId = getArchivedVersions;
 
 // Get specific archived document
 export const getArchivedById = async (archiveId) => {
@@ -95,6 +99,24 @@ export const getArchiveStats = async () => {
     const response = await archiveApi.get("/stats");
     return response.data;
   } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+/**
+ * Service untuk mengarsipkan dokumen SOP aktif
+ * @param {string} sopId - ID dokumen SOP
+ * @param {string} reason - Alasan pengarsipan
+ * @returns {Promise<Object>} - Response dari server
+ */
+export const archiveSopDocument = async (sopId, reason) => {
+  try {
+    const response = await archiveApi.post(`/archive-sop/${sopId}`, { reason });
+
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error archiving document:", error);
+    console.error("Error details:", error.response?.data); // Debug log
     throw error.response?.data || error;
   }
 };

@@ -38,7 +38,6 @@ const logActivityLogActivity = async (
       targetData ? "activity_log" : null
     );
   } catch (error) {
-    console.error("Error logging activity log activity:", error.message);
     // Tidak throw error agar tidak mengganggu flow utama
   }
 };
@@ -79,21 +78,12 @@ exports.getAllLogs = async (req, res) => {
       filters
     );
 
-    // Log aktivitas melihat daftar log aktivitas
-    await logActivityLogActivity(
-      req.user,
-      "VIEW",
-      `Admin ${req.user.name} mengakses riwayat aktivitas (${result.logs.length} records)`,
-      req
-    );
-
     res.status(200).json({
       success: true,
       message: "Riwayat aktivitas berhasil diambil",
       data: result,
     });
   } catch (error) {
-    console.error("Error in getAllLogs:", error.message);
     console.error("Stack trace:", error.stack);
     res.status(500).json({
       success: false,
@@ -134,7 +124,6 @@ exports.getLogById = async (req, res) => {
       data: log,
     });
   } catch (error) {
-    console.error("Error in getLogById:", error.message);
     res.status(500).json({
       success: false,
       message: "Gagal mengambil detail log aktivitas",
@@ -176,7 +165,6 @@ exports.searchLogs = async (req, res) => {
       keyword: q.trim(),
     });
   } catch (error) {
-    console.error("Error in searchLogs:", error.message);
     res.status(500).json({
       success: false,
       message: "Gagal mencari riwayat aktivitas",
@@ -206,7 +194,6 @@ exports.getActivityStats = async (req, res) => {
       data: stats,
     });
   } catch (error) {
-    console.error("Error in getActivityStats:", error.message);
     res.status(500).json({
       success: false,
       message: "Gagal mengambil statistik aktivitas",
@@ -254,7 +241,6 @@ exports.createLog = async (req, res) => {
       data: newLog,
     });
   } catch (error) {
-    console.error("Error in createLog:", error.message);
     res.status(500).json({
       success: false,
       message: "Gagal membuat log aktivitas",
@@ -295,7 +281,6 @@ exports.cleanupOldLogs = async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error("Error in cleanupOldLogs:", error.message);
     res.status(500).json({
       success: false,
       message: "Gagal melakukan cleanup log aktivitas",
@@ -328,7 +313,6 @@ exports.getUserActivities = async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error("Error in getUserActivities:", error.message);
     res.status(500).json({
       success: false,
       message: "Gagal mengambil riwayat aktivitas user",
@@ -336,3 +320,47 @@ exports.getUserActivities = async (req, res) => {
     });
   }
 };
+
+/**
+ * Helper function untuk logging aktivitas dokumen
+ * @param {Object} user - Data user yang melakukan aksi
+ * @param {string} action - Aksi yang dilakukan (APPROVE, REJECT, VIEW, etc.)
+ * @param {string} description - Deskripsi aktivitas
+ * @param {Object} req - Request object untuk mendapatkan IP dan user agent
+ * @param {Object} targetData - Data target dokumen
+ */
+const logDocumentActivity = async (
+  user,
+  action,
+  description,
+  req,
+  targetData = null
+) => {
+  try {
+    // Pastikan semua parameter user ada, gunakan default jika undefined
+    const userId = user?.id || 32; // Default to system user jika tidak ada
+    const userName = user?.name || user?.email || "Unknown User";
+    const userRole = user?.role || "user";
+
+    // Pastikan parameter lain juga tidak undefined
+    const actionStr = action || "UNKNOWN";
+    const descriptionStr = description || "No description";
+
+    await ActivityLog.logUserActivity(
+      userId,
+      userName,
+      userRole,
+      actionStr,
+      "DOCUMENT", // Module untuk aktivitas dokumen
+      descriptionStr,
+      req,
+      targetData?.id || null,
+      "sop_document" // Target type untuk SOP document
+    );
+  } catch (error) {
+    // Tidak throw error agar tidak mengganggu flow utama
+  }
+};
+
+// Export the function
+exports.logDocumentActivity = logDocumentActivity;

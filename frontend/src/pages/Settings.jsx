@@ -7,6 +7,7 @@ import {
 } from "../utils/cryptoUtils.jsx";
 // Import API untuk user operations
 import { updateUserProfile, changePassword } from "../services/userApi";
+import { getAllUnits } from "../services/unitApi.jsx";
 // Import icon dari react-icons untuk UI settings
 import {
   FiSave,
@@ -41,6 +42,28 @@ const Settings = () => {
     unit: "",
     role: "",
   });
+
+  // State untuk daftar unit kerja
+  const [units, setUnits] = useState([]);
+  // Ambil daftar unit kerja dari API
+  useEffect(() => {
+    const fetchUnits = async () => {
+      try {
+        const data = await getAllUnits();
+        // Jika respons API mengandung properti units, gunakan itu
+        if (data && Array.isArray(data.units)) {
+          setUnits(data.units);
+        } else if (Array.isArray(data)) {
+          setUnits(data);
+        } else {
+          setUnits([]);
+        }
+      } catch {
+        // Tidak perlu notifikasi error di sini, cukup biarkan kosong
+      }
+    };
+    fetchUnits();
+  }, []);
 
   // State untuk form update profil
   const [profileForm, setProfileForm] = useState({
@@ -94,11 +117,25 @@ const Settings = () => {
     try {
       const userData = getSafeUserDataNoRedirect();
       if (userData) {
+        // Fungsi untuk mendapatkan unit ID berdasarkan nama_unit atau langsung menggunakan ID
+        const getUnitId = (unitValue) => {
+          if (!unitValue || !units.length) return unitValue;
+
+          // Jika unitValue sudah berupa ID (angka), kembalikan langsung
+          if (!isNaN(unitValue)) return unitValue;
+
+          // Cari unit berdasarkan nama_unit dan kembalikan ID
+          const foundUnit = units.find((unit) => unit.nama_unit === unitValue);
+          return foundUnit ? foundUnit.id : unitValue;
+        };
+
+        const unitId = getUnitId(userData.unit);
+
         setProfileData({
           name: userData.name || "",
           email: userData.email || "",
           position: userData.position || "",
-          unit: userData.unit || "",
+          unit: unitId,
           role: userData.role || "",
         });
 
@@ -106,14 +143,14 @@ const Settings = () => {
           name: userData.name || "",
           email: userData.email || "",
           position: userData.position || "",
-          unit: userData.unit || "",
+          unit: unitId,
         });
       }
     } catch (error) {
       console.error("Error loading user data:", error);
       showNotification("error", "Gagal memuat data pengguna");
     }
-  }, []);
+  }, [units]);
 
   // Fungsi untuk memuat pengaturan notifikasi dari localStorage
   const loadNotificationSettings = useCallback(() => {
@@ -495,16 +532,22 @@ const Settings = () => {
                       <FiUsers className="mr-2" size={16} />
                       Unit Kerja
                     </label>
-                    <input
-                      type="text"
+                    <select
                       name="unit"
                       value={profileForm.unit}
                       onChange={handleProfileChange}
                       className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
                         errors.unit ? "border-red-500" : "border-gray-300"
-                      }`}
-                      placeholder="Masukkan unit kerja"
-                    />
+                      }`}>
+                      <option value="">Pilih unit kerja</option>
+                      {units &&
+                        units.length > 0 &&
+                        units.map((unit) => (
+                          <option key={unit.id} value={unit.id}>
+                            {unit.nama_unit}
+                          </option>
+                        ))}
+                    </select>
                     {errors.unit && (
                       <p className="text-red-500 text-sm flex items-center mt-1">
                         <FiX size={14} className="mr-1" />
@@ -527,7 +570,7 @@ const Settings = () => {
                   <button
                     type="submit"
                     disabled={isLoading.profile}
-                    className="w-full px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    className="w-full px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer">
                     {isLoading.profile ? (
                       <div className="flex items-center justify-center space-x-2">
                         <FiLoader className="animate-spin" size={16} />

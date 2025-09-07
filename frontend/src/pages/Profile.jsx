@@ -1,7 +1,9 @@
 // Import React
-import React from "react";
+import { useState, useEffect } from "react";
 // Import crypto utility functions
 import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
+// Import API untuk mendapatkan data unit
+import { getAllUnits } from "../services/unitApi";
 // Import icon dari react-icons untuk UI profile
 import { FiUser, FiMail, FiUsers, FiBriefcase, FiMapPin } from "react-icons/fi";
 
@@ -12,6 +14,49 @@ import { FiUser, FiMail, FiUsers, FiBriefcase, FiMapPin } from "react-icons/fi";
 const Profile = () => {
   // Ambil data user dari sessionStorage menggunakan fungsi helper
   const user = getSafeUserDataNoRedirect();
+
+  // State untuk data units
+  const [units, setUnits] = useState([]);
+  const [userUnitName, setUserUnitName] = useState("");
+
+  // Fetch units data saat komponen mount
+  useEffect(() => {
+    const fetchUnits = async () => {
+      try {
+        const unitsData = await getAllUnits();
+        const unitsArray = unitsData.units || unitsData;
+        setUnits(unitsArray);
+
+        // Cari nama unit berdasarkan ID user
+        if (user?.unit && unitsArray.length > 0) {
+          const userUnit = unitsArray.find(
+            (unit) => unit.id === parseInt(user.unit)
+          );
+          if (userUnit) {
+            setUserUnitName(userUnit.nama_unit);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching units:", error);
+      }
+    };
+
+    if (user) {
+      fetchUnits();
+    }
+  }, [user]);
+
+  // Update userUnitName ketika user atau units berubah
+  useEffect(() => {
+    if (user?.unit && units.length > 0) {
+      const userUnit = units.find((unit) => unit.id === parseInt(user.unit));
+      if (userUnit) {
+        setUserUnitName(userUnit.nama_unit);
+      } else {
+        setUserUnitName("");
+      }
+    }
+  }, [user?.unit, units]);
 
   // Fungsi untuk mengkonversi role ke format yang user-friendly
   const getRoleLabel = (role) => {
@@ -107,7 +152,10 @@ const Profile = () => {
                 Unit Kerja
               </label>
               <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800">
-                {user?.unit || "Unit tidak tersedia"}
+                {userUnitName ||
+                  (user?.unit
+                    ? `Unit ID: ${user.unit}`
+                    : "Unit tidak tersedia")}
               </div>
             </div>
 

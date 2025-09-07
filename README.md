@@ -8,25 +8,35 @@ This application is still under development
 
 ## Existing Features
 
-- CRUD SOP (with upload PDF)
+- CRUD SOP
 
-- SOP Publication
+- SOP publication (all users, including guests, only university SOPs)
+
+- SOP publication per units (all internal university users according to work unit)
 
 - Login
 
-- Displaying SOP published on public page
+- Forgot password
 
-- SOP Feedback
+- SOP Feedback [in update]
 
 - SOP Archive
 
-- Displaying user profile
-
 - User settings
 
-- Users management
+- Manage users
 
-- Log Activity (on progress)
+- Log Activity (only admin) [under maintenance]
+
+- Manage units
+
+- Assign create SOP with admin & admin unit
+
+- SOP revision via SOP creator
+
+- Manage assignments [admin & admin unit]
+
+- My assignments [admin unit & user]
 
 ## How to Install
 
@@ -98,4 +108,10 @@ Sometimes the package version is a problem when first trying projects from the r
 
 6. [Vite](https://vite.dev) => The build tool for the web
 
-7. [Firebase](https://firebase.google.com) => Storage for document
+7. [Mermaid js](https://mermaid.js.org/) => JavaScript based diagramming and charting tool
+
+8. [QR Code](https://www.npmjs.com/package/qrcode) => QR code/2d barcode generator
+
+### ⚠️ Attention
+
+If you encounter any errors or bugs, or would like to provide feedback and suggestions on this application, please contact us via [email](mailto:nurfadila1523@gmail.com)

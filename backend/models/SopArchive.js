@@ -7,6 +7,126 @@ const pool = require("../config/db");
  */
 class SopArchive {
   /**
+   * Mendapatkan semua dokumen yang diarsipkan
+   * @returns {Promise<Array>} Array berisi semua dokumen yang diarsipkan
+   */
+  static async getAllArchivedDocs() {
+    const [rows] = await pool.query(`
+      SELECT 
+        a.id,
+        a.original_sop_id,
+        a.title,
+        a.description,
+        a.version,
+        a.status,
+        a.created_by,
+        a.archived_by,
+        a.archived_reason as reason,
+        a.original_created_at,
+        a.archived_at,
+        u.name as archived_by_name, 
+        creator.name as creator_name,
+        creator.id as creator_id,
+        sd.sop_code,
+        sd.unit_scope,
+        units.nama_unit as unit_scope_name
+      FROM sop_archive a
+      LEFT JOIN users u ON a.archived_by = u.id
+      LEFT JOIN users creator ON a.created_by = creator.id
+      LEFT JOIN sop_documents sd ON a.original_sop_id = sd.id
+      LEFT JOIN units ON sd.unit_scope = units.id
+      WHERE a.id IS NOT NULL
+      ORDER BY a.archived_at DESC
+    `);
+
+    return rows;
+  }
+
+  /**
+   * Mendapatkan data arsip berdasarkan ID
+   * @param {number} id - ID arsip yang dicari
+   * @returns {Promise<Object|null>} Object data arsip atau null jika tidak ditemukan
+   */
+  static async getArchiveById(id) {
+    const [rows] = await pool.query(
+      `
+      SELECT a.*, u.name as archived_by_name, sd.sop_code
+      FROM sop_archive a
+      LEFT JOIN users u ON a.archived_by = u.id
+      LEFT JOIN sop_documents sd ON a.original_sop_id = sd.id
+      WHERE a.id = ?
+    `,
+      [id]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  /**
+   * Membuat entri arsip baru
+   * @param {Object} archiveData - Data arsip yang akan dibuat
+   * @returns {Promise<Object>} Result dari operasi insert
+   */
+  static async createArchive(archiveData) {
+    const [result] = await pool.query(`INSERT INTO sop_archive SET ?`, [
+      archiveData,
+    ]);
+    return result;
+  }
+
+  /**
+   * Menandai arsip sebagai dipulihkan (pada implementasi ini, kita akan menghapus dari arsip)
+   * @param {number} id - ID arsip yang akan ditandai
+   * @param {number} restoredBy - ID user yang memulihkan
+   * @returns {Promise<Object>} Result dari operasi delete
+   */
+  static async markAsRestored(id, restoredBy) {
+    // Karena tabel sop_archive tidak memiliki kolom is_restored,
+    // kita akan menghapus entry dari arsip sebagai tanda bahwa dokumen telah dipulihkan
+    const [result] = await pool.query(`DELETE FROM sop_archive WHERE id = ?`, [
+      id,
+    ]);
+    return result;
+  }
+
+  /**
+   * Mendapatkan statistik arsip
+   * @returns {Promise<Object>} Object berisi statistik arsip
+   */
+  static async getArchiveStats() {
+    const [totalArchived] = await pool.query(
+      `SELECT COUNT(*) as total FROM sop_archive`
+    );
+
+    const [recentArchives] = await pool.query(
+      `SELECT COUNT(*) as total FROM sop_archive 
+       WHERE archived_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)`
+    );
+
+    const [archivesByMonth] = await pool.query(
+      `SELECT 
+        YEAR(archived_at) as year,
+        MONTH(archived_at) as month,
+        COUNT(*) as count
+       FROM sop_archive 
+       WHERE archived_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+       GROUP BY YEAR(archived_at), MONTH(archived_at)
+       ORDER BY year, month`
+    );
+
+    const [uniqueDocuments] = await pool.query(
+      `SELECT COUNT(DISTINCT original_sop_id) as total FROM sop_archive`
+    );
+
+    return {
+      totalArchived: totalArchived[0].total,
+      totalRestored: 0, // Tidak ada kolom restored di tabel sop_archive
+      activeArchives: totalArchived[0].total,
+      recentArchives: recentArchives[0].total,
+      uniqueDocuments: uniqueDocuments[0].total,
+      archivesByMonth: archivesByMonth,
+    };
+  }
+  /**
    * Constructor untuk membuat instance SopArchive
    * @param {string} title - Judul dokumen yang diarsipkan
    * @param {string} description - Deskripsi dokumen arsip
@@ -62,7 +182,11 @@ class SopArchive {
     return {
       id: sopDoc.id,
       title: sopDoc.sop_title,
-      description: sopDoc.organization,
+      description: JSON.stringify({
+        organization: sopDoc.organization,
+        sop_code: sopDoc.sop_code,
+        sop_applicable: sopDoc.sop_applicable,
+      }), // Store structured data as JSON
       file_path: sopDoc.url,
       file_name: sopDoc.sop_title ? `${sopDoc.sop_title}.pdf` : "document.pdf",
       file_size: null, // Tidak disimpan di tabel sop_documents
@@ -72,6 +196,95 @@ class SopArchive {
       created_by: null, // Akan diset ke archivedBy di function archiveDocument
       created_at: sopDoc.created_at,
     };
+  }
+
+  /**
+   * Pindahkan dokumen ke arsip (move dari sop_documents ke sop_archive)
+   * @param {Object} sopData - Data dokumen SOP yang akan diarsipkan
+   * @param {number} archivedBy - ID user yang melakukan pengarsipan
+   * @param {string} reason - Alasan arsip (default: "Document archived")
+   * @returns {Object} - Result dari operasi arsip
+   */
+  static async moveToArchiveOnDelete(
+    sopData,
+    archivedBy,
+    reason = "Document archived"
+  ) {
+    const connection = await pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      // Konversi format sop_documents ke format archive
+      const archiveData = this.convertSopDocToArchiveFormat(sopData);
+
+      // Destruktur data yang sudah dikonversi
+      const {
+        id,
+        title,
+        description,
+        file_path,
+        file_name,
+        file_size,
+        version,
+        category,
+        status,
+        created_at,
+      } = archiveData;
+
+      // Gunakan archivedBy sebagai archived_by, dan tetap pakai original creator
+      const created_by = sopData.user_id || archivedBy;
+      const archived_by = archivedBy;
+
+      const queryParams = [
+        id,
+        title,
+        description,
+        file_path,
+        file_name,
+        file_size,
+        version,
+        category,
+        status,
+        created_by,
+        archived_by,
+        reason,
+        created_at,
+      ];
+
+      // Step 1: INSERT ke tabel sop_archive
+      const [archiveResult] = await connection.query(
+        `INSERT INTO sop_archive 
+         (original_sop_id, title, description, file_path, file_name, file_size, 
+          version, category, status, created_by, archived_by, archived_reason, 
+          original_created_at, archived_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        queryParams
+      );
+
+      // Step 2: DELETE dari tabel sop_documents
+      const [deleteResult] = await connection.query(
+        "DELETE FROM sop_documents WHERE id = ?",
+        [id]
+      );
+
+      await connection.commit();
+
+      if (archiveResult.affectedRows === 1 && deleteResult.affectedRows === 1) {
+        return {
+          id: archiveResult.insertId,
+          success: true,
+          message: "Document moved to archive successfully",
+        };
+      } else {
+        throw new Error("Failed to move document to archive");
+      }
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   /**
@@ -86,70 +299,68 @@ class SopArchive {
     archivedBy,
     reason = "Document updated"
   ) {
-    console.log("archiveDocument called with:", {
-      sopData,
-      archivedBy,
-      reason,
-    });
+    const connection = await pool.getConnection();
 
-    // Konversi format sop_documents ke format archive
-    const archiveData = this.convertSopDocToArchiveFormat(sopData);
-    console.log("Converted archive data:", archiveData);
+    try {
+      await connection.beginTransaction();
 
-    // Destruktur data yang sudah dikonversi
-    const {
-      id,
-      title,
-      description,
-      file_path,
-      file_name,
-      file_size,
-      version,
-      category,
-      status,
-      created_at,
-    } = archiveData;
+      // Konversi format sop_documents ke format archive
+      const archiveData = this.convertSopDocToArchiveFormat(sopData); // Destruktur data yang sudah dikonversi
+      const {
+        id,
+        title,
+        description,
+        file_path, // Link firebase lama yang akan diarsipkan
+        file_name,
+        file_size,
+        version,
+        category,
+        status,
+        created_at,
+      } = archiveData;
 
-    // Gunakan archivedBy sebagai created_by karena info creator asli tidak tersedia
-    // and archivedBy is guaranteed to exist (current authenticated user)
-    const created_by = archivedBy;
+      // Gunakan archivedBy sebagai created_by karena info creator asli tidak tersedia
+      const created_by = sopData.user_id || archivedBy;
 
-    const queryParams = [
-      id,
-      title,
-      description,
-      file_path,
-      file_name,
-      file_size,
-      version,
-      category,
-      status,
-      created_by,
-      archivedBy,
-      reason,
-      created_at,
-    ];
-    console.log("Executing archive query with params:", queryParams);
+      const queryParams = [
+        id,
+        title,
+        description,
+        file_path, // INSERT link firebase lama ke field file_path di sop_archive
+        file_name,
+        file_size,
+        version,
+        category,
+        status,
+        created_by,
+        archivedBy,
+        reason,
+        created_at,
+      ]; // Step 1: INSERT link firebase lama ke sop_archive
+      const [result] = await connection.query(
+        `INSERT INTO sop_archive 
+         (original_sop_id, title, description, file_path, file_name, file_size, 
+          version, category, status, created_by, archived_by, archived_reason, 
+          original_created_at, archived_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        queryParams
+      );
 
-    const [result] = await pool.query(
-      `INSERT INTO sop_archive 
-       (original_sop_id, title, description, file_path, file_name, file_size, 
-        version, category, status, created_by, archived_by, archived_reason, 
-        original_created_at, archived_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      queryParams
-    );
-
-    console.log("Archive query result:", result);
-
-    if (result.affectedRows === 1) {
-      return {
-        id: result.insertId,
-        success: true,
-        message: "Document archived successfully",
-      };
-    } else {
-      throw new Error("Failed to archive document");
+      await connection.commit(); // Step 2: Setelah ini, controller akan INSERT link firebase baru ke sop_documents
+      if (result.affectedRows === 1) {
+        return {
+          id: result.insertId,
+          success: true,
+          message: "Document archived successfully",
+        };
+      } else {
+        throw new Error("Failed to archive document");
+      }
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
   }
 
@@ -159,12 +370,10 @@ class SopArchive {
       `SELECT 
         a.*,
         u1.name as created_by_name,
-        u2.name as archived_by_name,
-        s.sop_title as current_title
+        u2.name as archived_by_name
        FROM sop_archive a
        LEFT JOIN users u1 ON a.created_by = u1.id
        LEFT JOIN users u2 ON a.archived_by = u2.id
-       LEFT JOIN sop_documents s ON a.original_sop_id = s.id
        ORDER BY a.archived_at DESC`
     );
     return rows;
@@ -221,7 +430,7 @@ class SopArchive {
     }
   }
 
-  // Restore archived document (replace current with archived version)
+  // Restore archived document (move from archive back to main table)
   static async restoreDocument(archiveId, restoredBy) {
     const connection = await pool.getConnection();
 
@@ -240,61 +449,63 @@ class SopArchive {
 
       const archived = archivedRows[0];
 
-      // Get current document to archive it first
-      const [currentRows] = await connection.query(
+      // Check if this is a restore from file update or full document restore
+      const [existingRows] = await connection.query(
         "SELECT * FROM sop_documents WHERE id = ?",
         [archived.original_sop_id]
       );
 
-      if (currentRows.length === 0) {
-        throw new Error("Current document not found");
+      if (existingRows.length > 0) {
+        // Document exists - this is a file restore (tukar link firebase)
+        // Step 1: INSERT/UPDATE ke sop_documents (tukar URL dari archive ke documents)
+        await connection.query(
+          `UPDATE sop_documents 
+           SET url = ?, sop_version = ?, updated_at = NOW()
+           WHERE id = ?`,
+          [
+            archived.file_path, // URL dari archive menggantikan URL di documents
+            archived.version,
+            archived.original_sop_id,
+          ]
+        );
+      } else {
+        // Document doesn't exist - full restore (recreate document)
+        // Parse stored data from description field
+        let storedData = {};
+        try {
+          storedData = JSON.parse(archived.description || "{}");
+        } catch (e) {
+          // Fallback for old format
+          storedData = {
+            organization: archived.category || "Unknown",
+            sop_code: `RESTORED_${archived.original_sop_id}`,
+            sop_applicable: "2025-01-01",
+          };
+        }
+
+        // Step 1: INSERT ke sop_documents with all required fields
+        await connection.query(
+          `INSERT INTO sop_documents 
+           (id, sop_code, sop_title, organization, sop_applicable, url, sop_version, status, user_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            archived.original_sop_id,
+            storedData.sop_code || `RESTORED_${archived.original_sop_id}`,
+            archived.title,
+            storedData.organization || archived.category,
+            storedData.sop_applicable
+              ? new Date(storedData.sop_applicable).toISOString().split("T")[0]
+              : "2025-01-01",
+            archived.file_path,
+            archived.version,
+            "draft", // Set status to draft when restored
+            archived.created_by || restoredBy,
+            archived.original_created_at,
+          ]
+        );
       }
 
-      const current = currentRows[0];
-
-      // Archive current version
-      await connection.query(
-        `INSERT INTO sop_archive 
-         (original_sop_id, title, description, file_path, file_name, file_size, 
-          version, category, status, created_by, archived_by, archived_reason, 
-          original_created_at, archived_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [
-          current.id,
-          current.sop_title,
-          current.organization,
-          current.url,
-          current.sop_title + ".pdf",
-          null,
-          current.sop_version,
-          current.organization,
-          current.status,
-          current.created_by,
-          restoredBy,
-          "Replaced by restored version",
-          current.created_at,
-        ]
-      );
-
-      // Update current document with archived data
-      await connection.query(
-        `UPDATE sop_documents 
-         SET sop_title = ?, url = ?, organization = ?, 
-             sop_applicable = ?, sop_version = ?, status = ?, 
-             updated_at = NOW()
-         WHERE id = ?`,
-        [
-          archived.title,
-          archived.file_path,
-          archived.category,
-          archived.original_created_at,
-          archived.version,
-          archived.status,
-          archived.original_sop_id,
-        ]
-      );
-
-      // Remove the restored version from archive
+      // Step 2: DELETE dari sop_archive (setelah INSERT/UPDATE berhasil)
       await connection.query("DELETE FROM sop_archive WHERE id = ?", [
         archiveId,
       ]);
@@ -304,6 +515,7 @@ class SopArchive {
       return {
         success: true,
         message: "Document restored successfully",
+        documentId: archived.original_sop_id,
       };
     } catch (error) {
       await connection.rollback();
@@ -311,33 +523,6 @@ class SopArchive {
     } finally {
       connection.release();
     }
-  }
-
-  // Get archive statistics
-  static async getArchiveStats() {
-    const [stats] = await pool.query(
-      `SELECT 
-        COUNT(*) as total_archived,
-        COUNT(DISTINCT original_sop_id) as documents_with_archives,
-        AVG(file_size) as avg_file_size
-       FROM sop_archive`
-    );
-
-    const [recentArchives] = await pool.query(
-      `SELECT 
-        a.title,
-        a.archived_at,
-        u.name as archived_by_name
-       FROM sop_archive a
-       LEFT JOIN users u ON a.archived_by = u.id
-       ORDER BY a.archived_at DESC
-       LIMIT 5`
-    );
-
-    return {
-      ...stats[0],
-      recent_archives: recentArchives,
-    };
   }
 }
 

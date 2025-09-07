@@ -11,6 +11,7 @@ import {
   FiRefreshCw,
 } from "react-icons/fi";
 import * as activityLogApi from "../services/activityLogApi";
+import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
 
 const ActivityLogsPage = () => {
   const [logs, setLogs] = useState([]);
@@ -32,6 +33,24 @@ const ActivityLogsPage = () => {
   const [selectedLog, setSelectedLog] = useState(null);
   const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [cleanupDays, setCleanupDays] = useState(90);
+
+  // Access guard - hanya admin penuh yang bisa akses
+  const userData = getSafeUserDataNoRedirect();
+  if (userData?.role !== "admin") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <strong className="font-bold">Akses Ditolak!</strong>
+            <span className="block sm:inline">
+              {" "}
+              Hanya admin penuh yang dapat mengakses halaman Riwayat Aktivitas.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const loadLogs = useCallback(async () => {
     try {

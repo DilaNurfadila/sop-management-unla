@@ -9,6 +9,7 @@ import {
   FiTag,
 } from "react-icons/fi";
 import * as unitApi from "../services/unitApi";
+import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
 
 const UnitManagementPage = () => {
   const [units, setUnits] = useState([]);
@@ -28,6 +29,24 @@ const UnitManagementPage = () => {
   });
   // State untuk menampilkan error di dalam modal
   const [modalError, setModalError] = useState("");
+
+  // Access guard - hanya admin penuh yang bisa akses
+  const userData = getSafeUserDataNoRedirect();
+  if (userData?.role !== "admin") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <strong className="font-bold">Akses Ditolak!</strong>
+            <span className="block sm:inline">
+              {" "}
+              Hanya admin penuh yang dapat mengakses halaman Pengelolaan Unit.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load data saat komponen dimount

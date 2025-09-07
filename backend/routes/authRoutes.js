@@ -3,10 +3,9 @@ const router = express.Router();
 const authController = require("../controllers/authController");
 const { authenticate } = require("../middlewares/authMiddleware");
 
-router.post("/request-otp", authController.requestOtp);
-router.post("/verify-otp", authController.verifyOtp);
 router.post("/register", authController.register);
-router.post("/logout", authenticate, authController.logout);
+// Logout tidak butuh authenticate middleware karena harus bisa logout meskipun token expired
+router.post("/logout", authController.logout);
 
 // Routes untuk login dan forgot password
 router.post("/login", authController.login);

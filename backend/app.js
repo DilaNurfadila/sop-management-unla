@@ -1,69 +1,317 @@
 // Import Express framework untuk web server
 const express = require("express");
-// Import CORS middleware untuk handling cross-origin requests
 const cors = require("cors");
-// Import cookie-parser untuk parsing HTTP cookies
 const cookieParser = require("cookie-parser");
+const pool = require("./config/db");
 
-// Import route handlers untuk berbagai endpoint
-const docRoutes = require("./routes/docRoutes"); // Routes untuk dokumen SOP
-const authRoutes = require("./routes/authRoutes"); // Routes untuk authentication
-const userRoutes = require("./routes/userRoutes"); // Routes untuk user management
-const feedbackRoutes = require("./routes/feedbackRoutes"); // Routes untuk feedback sistem
-const archiveRoutes = require("./routes/archiveRoutes"); // Routes untuk archive sistem
-const unitRoutes = require("./routes/unitRoutes"); // Routes untuk unit management
-const activityLogRoutes = require("./routes/activityLogRoutes"); // Routes untuk activity logs
+// Import routes
+const authRoutes = require("./routes/authRoutes");
+const userRoutes = require("./routes/userRoutes");
+const unitRoutes = require("./routes/unitRoutes");
+const activityLogRoutes = require("./routes/activityLogRoutes");
+const feedbackRoutes = require("./routes/feedbackRoutes");
+const archiveRoutes = require("./routes/archiveRoutes");
+const docRoutes = require("./routes/docRoutes");
+const sopCreatorRoutes = require("./routes/sopCreatorRoutes");
+const flowchartRoutes = require("./routes/flowchartRoutes");
+const sopVisualizationRoutes = require("./routes/sopVisualizationRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
+const qrCodeRoutes = require("./routes/qrCodeRoutes");
 
-// Load environment variables dari .env file
-require("dotenv").config();
-
-// Inisialisasi Express application
+// Buat instance Express
 const app = express();
 
-/**
- * Middleware Configuration
- */
-
-// Middleware untuk parsing cookies dari request headers
+// Middleware untuk parsing cookies
 app.use(cookieParser());
 
-// Middleware CORS untuk mengizinkan frontend mengakses backend
+// Konfigurasi CORS untuk mengizinkan frontend mengakses backend
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173", // URL frontend dari environment atau default
-    credentials: true, // Mengizinkan pengiriman cookies dalam cross-origin requests
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:5175",
+    ], // URL frontend React
+    credentials: true, // Mengizinkan cookie dikirim
   })
 );
 
-// Middleware untuk parsing JSON request body
+// Middleware untuk parsing JSON
 app.use(express.json());
 
-/**
- * Route Configuration
- * Semua routes diawali dengan prefix /api/
- */
-app.use("/api/docs", docRoutes); // Endpoint untuk operasi dokumen SOP
-app.use("/api/auth", authRoutes); // Endpoint untuk authentication (login, register, logout)
-app.use("/api/users", userRoutes); // Endpoint untuk user management
-app.use("/api/feedback", feedbackRoutes); // Endpoint untuk sistem feedback
-app.use("/api/archive", archiveRoutes); // Endpoint untuk sistem arsip dokumen
-app.use("/api/units", unitRoutes); // Endpoint untuk unit management
-app.use("/api/activities", activityLogRoutes); // Endpoint untuk activity logs
+// Use routes
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/units", unitRoutes);
+app.use("/api/activity-logs", activityLogRoutes);
+app.use("/api/feedback", feedbackRoutes);
+app.use("/api/archive", archiveRoutes);
+app.use("/api/docs", docRoutes); // Rute dokumen
+app.use("/api/sop-creator", sopCreatorRoutes);
+app.use("/api", flowchartRoutes); // Rute flowchart
+app.use("/api/sop-visualization", sopVisualizationRoutes);
+app.use("/api/review", reviewRoutes);
+app.use("/api/qr", qrCodeRoutes);
 
-/**
- * Global Error Handler Middleware
- * Menangani semua error yang tidak ditangani di route handlers
- */
-app.use((err, req, res, next) => {
-  console.error(err.stack); // Log error ke console untuk debugging
-  res.status(500).json({ message: "Terjadi kesalahan server" });
+// PUBLIC QR verification route - bypass all middleware
+app.get("/verify-sop/:checksum", async (req, res) => {
+  try {
+    const { checksum } = req.params;
+    const pool = require("./config/db");
+
+    const [sopRows] = await pool.execute(
+      `SELECT 
+        d.id, 
+        d.sop_code, 
+        d.title, 
+        d.qr_checksum, 
+        d.review_status, 
+        d.approval_date,
+        d.sop_applicable,
+        approver.name AS approver_name,
+        unit.nama_unit AS unit_name
+      FROM sop_documents d
+      LEFT JOIN users approver ON d.approved_by = approver.id
+      LEFT JOIN units unit ON d.unit_scope = unit.id
+      WHERE d.qr_checksum = ?`,
+      [checksum]
+    );
+
+    if (sopRows.length === 0) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>SOP Verification - Document Not Found</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8f9fa; margin: 0; padding: 20px; }
+            .container { max-width: 600px; margin: 50px auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+            .header { background: #dc3545; color: white; padding: 30px; text-align: center; }
+            .content { padding: 30px; text-align: center; }
+            .icon { font-size: 48px; margin-bottom: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="icon">❌</div>
+              <h1>Dokumen SOP Tidak Ditemukan</h1>
+            </div>
+            <div class="content">
+              <p>Dokumen SOP dengan checksum yang diminta tidak ditemukan dalam sistem.</p>
+              <p><strong>Checksum:</strong> ${checksum.substring(0, 16)}...</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    const sop = sopRows[0];
+
+    // Cek apakah SOP benar-benar sudah disahkan
+    if (sop.review_status !== "approved") {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>SOP Verification - Not Approved</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8f9fa; margin: 0; padding: 20px; }
+            .container { max-width: 600px; margin: 50px auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+            .header { background: #ffc107; color: #212529; padding: 30px; text-align: center; }
+            .content { padding: 30px; text-align: center; }
+            .icon { font-size: 48px; margin-bottom: 20px; }
+            .warning { background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 20px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="icon">⚠️</div>
+              <h1>SOP Belum Disahkan</h1>
+            </div>
+            <div class="content">
+              <div class="warning">
+                <p><strong>PERINGATAN:</strong> Dokumen SOP ini belum mendapat pengesahan resmi.</p>
+                <p>Status: ${sop.review_status}</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="id">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SOP Verification - Document Verified</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            margin: 0; padding: 20px; min-height: 100vh; 
+          }
+          .container { 
+            max-width: 700px; margin: 30px auto; background: white; 
+            border-radius: 16px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); 
+            overflow: hidden; 
+          }
+          .header { 
+            background: linear-gradient(135deg, #28a745, #20c997); 
+            color: white; padding: 40px 30px; text-align: center; 
+          }
+          .content { padding: 40px 30px; }
+          .icon { font-size: 64px; margin-bottom: 15px; }
+          .info-grid { 
+            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; 
+            margin: 30px 0; 
+          }
+          .info-item { 
+            background: #f8f9fa; border-radius: 8px; padding: 20px; 
+            border-left: 4px solid #28a745; 
+          }
+          .info-label { 
+            font-size: 12px; color: #666; text-transform: uppercase; 
+            font-weight: 600; margin-bottom: 8px; 
+          }
+          .info-value { font-size: 16px; color: #212529; font-weight: 500; }
+          .verification-badge { 
+            background: #d4edda; border: 1px solid #c3e6cb; 
+            border-radius: 50px; padding: 15px 25px; margin: 30px auto; 
+            text-align: center; max-width: 300px; 
+          }
+          .footer { 
+            text-align: center; padding: 20px; background: #f8f9fa; 
+            color: #666; font-size: 14px; 
+          }
+          @media (max-width: 600px) {
+            .info-grid { grid-template-columns: 1fr; }
+            .container { margin: 10px; }
+            body { padding: 10px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="icon">✅</div>
+            <h1>Dokumen SOP Terverifikasi</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">Dokumen ini telah diverifikasi dan asli</p>
+          </div>
+          
+          <div class="content">
+            <div class="verification-badge">
+              <strong>🔒 DOKUMEN RESMI & TERVERIFIKASI</strong>
+              <br>
+              <small>Dibuka pada ${new Date().toLocaleString("id-ID")}</small>
+            </div>
+            
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Kode SOP</div>
+                <div class="info-value">${sop.sop_code || "N/A"}</div>
+              </div>
+              
+              <div class="info-item">
+                <div class="info-label">Status Review</div>
+                <div class="info-value">${
+                  sop.review_status === "approved"
+                    ? "✅ Disetujui"
+                    : sop.review_status
+                }</div>
+              </div>
+              
+              <div class="info-item" style="grid-column: span 2;">
+                <div class="info-label">Judul Dokumen</div>
+                <div class="info-value">${sop.title}</div>
+              </div>
+              
+              <div class="info-item">
+                <div class="info-label">Unit Kerja</div>
+                <div class="info-value">${sop.unit_name || "N/A"}</div>
+              </div>
+              
+              <div class="info-item">
+                <div class="info-label">Tanggal Pengesahan</div>
+                <div class="info-value">${
+                  sop.approval_date
+                    ? new Date(sop.approval_date).toLocaleDateString("id-ID")
+                    : "N/A"
+                }</div>
+              </div>
+              
+              <div class="info-item">
+                <div class="info-label">Disahkan Oleh</div>
+                <div class="info-value">${sop.approver_name || "N/A"}</div>
+              </div>
+              
+              <div class="info-item">
+                <div class="info-label">Berlaku Mulai</div>
+                <div class="info-value">${
+                  sop.sop_applicable
+                    ? new Date(sop.sop_applicable).toLocaleDateString("id-ID")
+                    : "N/A"
+                }</div>
+              </div>
+            </div>
+            
+            <div style="background: #e9ecef; border-radius: 8px; padding: 20px; margin-top: 30px; text-align: center;">
+              <h4 style="margin: 0 0 10px 0; color: #495057;">Checksum Verifikasi</h4>
+              <code style="font-size: 12px; color: #6c757d; word-break: break-all;">${checksum}</code>
+            </div>
+          </div>
+          
+          <div class="footer">
+            <p>© 2025 Universitas Langlangbuana - Sistem Manajemen SOP</p>
+            <p>Dokumen ini telah diverifikasi menggunakan teknologi QR Code dengan enkripsi checksum</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error("❌ Error verifying QR code:", error);
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html lang="id">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SOP Verification - Server Error</title>
+      </head>
+      <body>
+        <h2>❌ Server Error</h2>
+        <p>Tidak dapat memverifikasi QR code saat ini.</p>
+      </body>
+      </html>
+    `);
+  }
 });
 
-/**
- * Server Configuration
- * Start server pada port yang ditentukan di environment variable atau default 5000
- */
+// Route untuk testing koneksi database
+app.get("/api/test-connection", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT 1 + 1 AS result");
+    res.json({ message: "Database connection successful", result: rows[0] });
+  } catch (error) {
+    console.error("Database connection error:", error);
+    res.status(500).json({ error: "Database connection failed" });
+  }
+});
+
+// Mulai server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+module.exports = app;

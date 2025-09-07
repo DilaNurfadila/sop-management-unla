@@ -10,6 +10,8 @@ import {
 } from "react-icons/fi";
 // Import API service untuk fetch feedback data
 import { getAllFeedback } from "../services/feedbackApi";
+// Import date formatter utility
+import { dateFormatter } from "../utils/dateFormatter";
 
 /**
  * Komponen untuk menampilkan daftar feedback SOP yang dikelompokkan per dokumen
@@ -93,14 +95,8 @@ const SOPFeedbackList = () => {
   };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("id-ID", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (!dateString) return "-";
+    return dateFormatter(dateString);
   };
 
   if (loading) {

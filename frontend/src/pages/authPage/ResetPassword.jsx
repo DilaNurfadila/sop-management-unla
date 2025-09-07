@@ -205,7 +205,7 @@ const ResetPassword = () => {
                   <button
                     type="button"
                     onClick={() => togglePasswordVisibility("new")}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer">
                     {showPassword.new ? (
                       <FiEyeOff className="text-gray-400" size={18} />
                     ) : (
@@ -237,7 +237,7 @@ const ResetPassword = () => {
                   <button
                     type="button"
                     onClick={() => togglePasswordVisibility("confirm")}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer">
                     {showPassword.confirm ? (
                       <FiEyeOff className="text-gray-400" size={18} />
                     ) : (
@@ -251,7 +251,7 @@ const ResetPassword = () => {
               <button
                 type="submit"
                 disabled={isSubmitting || !token || !email}
-                className="w-full flex items-center justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium">
+                className="w-full flex items-center justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium cursor-pointer">
                 {isSubmitting ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

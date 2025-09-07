@@ -1,413 +1,604 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { getDocPdf, updateFile } from "../../services/apiPdf";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  updateSopDocument,
+  getSopDocumentById,
+} from "../../services/flowchartApi";
+// Import 'updateSopVersion' dihapus karena tidak digunakan lagi
+import { getUsers } from "../../services/userApi";
+import { getAllUnits } from "../../services/unitApi";
+import { FiArrowLeft } from "react-icons/fi";
 import Notification from "../../components/Notification";
-import ArchiveReasonModal from "../../components/ArchiveReasonModal";
-import { dateFormatterDB } from "../../utils/dateFormatter";
-import { FiArrowLeft, FiEdit, FiUpload, FiFile } from "react-icons/fi";
+import { getSafeUserDataNoRedirect } from "../../utils/cryptoUtils.jsx";
 
-const EditPdfDocPage = () => {
-  const { id } = useParams();
+const EditSOPPage = () => {
+  const login_user = getSafeUserDataNoRedirect();
+
   const navigate = useNavigate();
+  const { id } = useParams();
+  const [isLoading, setIsLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [users, setUsers] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [notification, setNotification] = useState(null);
+
+  // State untuk versioning SOP yang sudah pernah disahkan
+  const [wasEverPublished, setWasEverPublished] = useState(false);
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [versionType, setVersionType] = useState("");
+  const [pendingFormData, setPendingFormData] = useState(null);
+
+  // State form disederhanakan, 'version' dan 'status' dihapus
   const [formData, setFormData] = useState({
     sop_code: "",
-    sop_title: "",
-    organization: "",
-    sop_applicable: "",
-    sop_version: "",
+    title: "",
+    goals: "",
+    scope: "",
+    unit_scope: "",
+    definition: "",
+    sop_reference: "",
+    procedure_description: "",
   });
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [currentFileUrl, setCurrentFileUrl] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [notification, setNotification] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [showArchiveReasonModal, setShowArchiveReasonModal] = useState(false);
-  const [pendingSubmission, setPendingSubmission] = useState(null);
 
+  // Data untuk approval roles
+  const [approvalRoles, setApprovalRoles] = useState({
+    reviewer_id: "",
+    approver_id: "",
+  });
+
+  // Load SOP data dan user list
   useEffect(() => {
-    const fetchDoc = async () => {
+    const loadData = async () => {
       try {
-        setLoading(true);
-        const response = await getDocPdf(id);
+        setInitialLoading(true);
+
+        // Load SOP data
+        const sopData = await getSopDocumentById(id);
+
+        // SOP dianggap pernah disahkan jika:
+        // 1. Status Published/Unpublished (bukan Draft)
+        // 2. Atau punya published_at (pernah dipublish)
+        // 3. Atau versi bukan 1.0 (sudah ada perubahan)
+        const everPublished =
+          sopData.status === "published" ||
+          sopData.status === "unpublished" ||
+          sopData.published_at !== null;
+        setWasEverPublished(everPublished);
 
         setFormData({
-          sop_code: response.sop_code || "",
-          sop_title: response.sop_title || "",
-          organization: response.organization || "",
-          sop_applicable: response.sop_applicable
-            ? dateFormatterDB(response.sop_applicable)
-            : "",
-          sop_version: response.sop_version || "",
+          sop_code: sopData.sop_code || "",
+          title: sopData.title || "",
+          goals: sopData.goals || "",
+          scope: sopData.scope || "",
+          unit_scope: sopData.unit_scope || "", // Ini sekarang berisi ID unit
+          definition: sopData.definition || "",
+          sop_reference: sopData.sop_reference || "",
+          procedure_description: sopData.procedure_description || "",
+          // 'version' dan 'status' tidak lagi di-set
         });
-        setCurrentFileUrl(response.url || "");
+
+        // Set approval roles data dari response
+        setApprovalRoles({
+          reviewer_id: sopData.reviewer_id || "",
+          approver_id: sopData.approver_id || "",
+        });
+
+        // Load user list
+        const userList = await getUsers();
+        setUsers(userList);
+
+        // Load units list untuk dropdown
+        const unitResponse = await getAllUnits();
+        // API mengembalikan data dalam format { units: [...] }
+        const unitsArray = unitResponse.units || [];
+        setUnits(unitsArray);
       } catch (error) {
-        console.error("Error fetching document:", error);
-        setNotification({
-          message: error.message || "Gagal memuat dokumen",
-          type: "error",
-        });
-        // Navigate back after delay
-        setTimeout(() => {
-          navigate("/docs");
-        }, 2000);
+        console.error("Error loading data:", error);
+        // Set empty array untuk units jika gagal load
+        setUnits([]);
+        alert("Error loading SOP data: " + (error.message || "Unknown error"));
+        navigate("/docs");
       } finally {
-        setLoading(false);
+        setInitialLoading(false);
       }
     };
 
-    fetchDoc();
+    if (id) {
+      loadData();
+    }
   }, [id, navigate]);
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  // Handle input change
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      // Validate file type
-      if (file.type !== "application/pdf") {
-        setNotification({
-          message: "Hanya file PDF yang diperbolehkan",
-          type: "error",
-        });
-        e.target.value = "";
-        return;
-      }
-
-      // Validate file size (10MB max)
-      const maxSize = 10 * 1024 * 1024; // 10MB
-      if (file.size > maxSize) {
-        setNotification({
-          message: "Ukuran file tidak boleh lebih dari 10MB",
-          type: "error",
-        });
-        e.target.value = "";
-        return;
-      }
-
-      setSelectedFile(file);
-    }
+  // Handle approval roles change
+  const handleApprovalChange = (e) => {
+    const { name, value } = e.target;
+    setApprovalRoles((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
+  // Fungsi handleVersionUpdate dihapus seluruhnya
+
+  // Handle form submit
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.sop_code.trim() || !formData.sop_title.trim()) {
-      setNotification({
-        message: "Kode SOP dan Judul SOP wajib diisi",
-        type: "error",
-      });
+    // Jika SOP sudah pernah disahkan, tampilkan modal versioning
+    if (wasEverPublished) {
+      setPendingFormData({ ...formData, ...approvalRoles });
+      setShowVersionModal(true);
       return;
     }
 
-    // Prepare submission data
-    const submissionData = {
-      code: formData.sop_code.trim(),
-      title: formData.sop_title.trim(),
-      organization: formData.organization.trim(),
-      effective_date: formData.sop_applicable,
-      version: formData.sop_version.trim(),
-    };
-
-    // If there's a new file, show archive reason modal
-    if (selectedFile) {
-      setPendingSubmission(submissionData);
-      setShowArchiveReasonModal(true);
-      return;
-    }
-
-    // If no new file, proceed directly
-    await executeSubmission(submissionData, null);
-  };
-
-  const executeSubmission = async (metadata, archiveReason) => {
-    setIsSubmitting(true);
-
+    // Jika belum pernah disahkan (draft pertama), update langsung
+    setIsLoading(true);
     try {
-      console.log("Executing submission with archive reason:", archiveReason);
+      const completeData = {
+        ...formData,
+        ...approvalRoles,
+      };
 
-      await updateFile(id, selectedFile, metadata, archiveReason);
-
+      await updateSopDocument(id, completeData);
       setNotification({
-        message: selectedFile
-          ? "Dokumen dan file berhasil diperbarui"
-          : "Dokumen berhasil diperbarui",
         type: "success",
+        message: "SOP berhasil diupdate!",
       });
-
-      // Navigate back to list after delay
-      setTimeout(() => {
-        navigate("/docs", {
-          state: {
-            message: selectedFile
-              ? "Dokumen dan file berhasil diperbarui"
-              : "Dokumen berhasil diperbarui",
-            type: "success",
-          },
-        });
-      }, 1500);
+      setTimeout(() => navigate("/docs"), 1500);
     } catch (error) {
-      console.error("Error updating document:", error);
+      console.error("Error updating SOP:", error);
       setNotification({
-        message: error.message || "Gagal memperbarui dokumen",
         type: "error",
+        message: "Gagal mengupdate SOP: " + (error.message || "Unknown error"),
       });
     } finally {
-      setIsSubmitting(false);
-      setShowArchiveReasonModal(false);
-      setPendingSubmission(null);
+      setIsLoading(false);
     }
   };
 
-  const handleArchiveReasonConfirm = (reason) => {
-    if (pendingSubmission) {
-      executeSubmission(pendingSubmission, reason);
+  // Handle versioning update untuk SOP yang sudah published
+  const handleVersionUpdate = async () => {
+    if (!versionType || !pendingFormData) return;
+
+    setIsLoading(true);
+    setShowVersionModal(false);
+
+    try {
+      const completeData = {
+        ...pendingFormData,
+        version_type: versionType, // Kirim info tipe versi ke backend
+      };
+
+      await updateSopDocument(id, completeData);
+
+      // Pesan notifikasi sesuai jenis perubahan
+      const versionMessage =
+        versionType === "major"
+          ? `SOP berhasil diupdate dengan perubahan MAJOR! Status kembali ke Draft. Versi akan naik ke V.X.0 setelah disahkan ulang.`
+          : `SOP berhasil diupdate dengan perubahan MINOR! Versi naik ke V.X.Y dan status kembali ke Unpublished untuk review.`;
+
+      setNotification({
+        type: "success",
+        message: versionMessage,
+      });
+      setTimeout(() => navigate("/docs"), 2500); // Waktu lebih lama untuk membaca pesan
+    } catch (error) {
+      console.error("Error updating SOP:", error);
+      setNotification({
+        type: "error",
+        message: "Gagal mengupdate SOP: " + (error.message || "Unknown error"),
+      });
+    } finally {
+      setIsLoading(false);
+      setPendingFormData(null);
+      setVersionType("");
     }
   };
 
-  const handleArchiveReasonCancel = () => {
-    setShowArchiveReasonModal(false);
-    setPendingSubmission(null);
-  };
-
-  const closeNotification = () => {
-    setNotification(null);
-  };
-
-  const handleOpenCurrentFile = () => {
-    if (currentFileUrl) {
-      window.open(currentFileUrl, "_blank");
-    }
-  };
-
-  if (loading) {
+  if (initialLoading) {
     return (
-      <div className="min-h-screen bg-gray-100 p-6">
-        <div className="flex justify-center items-center py-12">
-          <div className="text-lg text-gray-600">Memuat dokumen...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading SOP data...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      {notification && (
-        <Notification
-          message={notification.message}
-          type={notification.type}
-          onClose={closeNotification}
-        />
-      )}
-
+    <div className="max-w-4xl mx-auto p-6 bg-white shadow-lg rounded-lg">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <Link
-              to="/docs"
-              className="mr-4 text-blue-600 hover:text-blue-800 transition-colors">
-              <FiArrowLeft size={24} />
-            </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-                <FiEdit className="mr-3" />
-                Ubah Dokumen SOP
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Ubah informasi dokumen dan ganti file PDF jika diperlukan
-              </p>
-            </div>
-          </div>
-          {currentFileUrl && (
-            <button
-              onClick={handleOpenCurrentFile}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-              <FiFile className="h-4 w-4" />
-              Lihat File Saat Ini
-            </button>
-          )}
+      <div className="mb-6 flex items-center gap-4">
+        <button
+          onClick={() => navigate("/docs")}
+          className="inline-flex items-center px-3 py-2 text-gray-600 hover:text-gray-800 transition-colors">
+          <FiArrowLeft className="mr-2" />
+          Kembali
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Edit SOP</h1>
+          <p className="text-gray-600">
+            Edit Standard Operating Procedure yang sudah ada.
+          </p>
         </div>
       </div>
 
-      {/* Form */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Kode SOP */}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Header Section */}
+        <div className="border-b pb-6 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-800">
+            Informasi Dasar
+          </h2>
+
+          {/* SOP Code */}
+          {formData.sop_code ? (
             <div>
               <label
                 htmlFor="sop_code"
-                className="block text-sm font-medium text-gray-700 mb-2">
-                Kode SOP <span className="text-red-500">*</span>
+                className="block text-sm font-medium text-gray-700 mb-1">
+                SOP Code
               </label>
               <input
                 type="text"
                 id="sop_code"
                 name="sop_code"
                 value={formData.sop_code}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Masukkan kode SOP"
-                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 focus:outline-none"
+                readOnly
               />
+              <p className="text-xs text-gray-500 mt-1">
+                SOP Code di-generate otomatis saat disahkan.
+              </p>
             </div>
-
-            {/* Versi */}
+          ) : (
             <div>
-              <label
-                htmlFor="sop_version"
-                className="block text-sm font-medium text-gray-700 mb-2">
-                Versi
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Status SOP Code
               </label>
-              <input
-                type="text"
-                id="sop_version"
-                name="sop_version"
-                value={formData.sop_version}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Masukkan versi SOP"
-              />
+              <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-yellow-50 text-yellow-800">
+                SOP Code akan di-generate setelah disahkan.
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Field Versi SOP Dihapus */}
 
           {/* Judul SOP */}
           <div>
             <label
-              htmlFor="sop_title"
-              className="block text-sm font-medium text-gray-700 mb-2">
-              Judul SOP <span className="text-red-500">*</span>
+              htmlFor="title"
+              className="block text-sm font-medium text-gray-700 mb-1">
+              Judul SOP *
             </label>
             <input
               type="text"
-              id="sop_title"
-              name="sop_title"
-              value={formData.sop_title}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Masukkan judul SOP"
+              id="title"
+              name="title"
+              value={formData.title}
+              onChange={handleInputChange}
+              placeholder="Judul lengkap Standard Operating Procedure"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Organisasi */}
-            <div>
-              <label
-                htmlFor="organization"
-                className="block text-sm font-medium text-gray-700 mb-2">
-                Organisasi
-              </label>
-              <input
-                type="text"
-                id="organization"
-                name="organization"
-                value={formData.organization}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Masukkan nama organisasi"
-              />
-            </div>
+          {/* Field Status Dihapus */}
 
-            {/* Tanggal Berlaku */}
-            <div>
-              <label
-                htmlFor="sop_applicable"
-                className="block text-sm font-medium text-gray-700 mb-2">
-                Tanggal Berlaku
-              </label>
-              <input
-                type="date"
-                id="sop_applicable"
-                name="sop_applicable"
-                value={formData.sop_applicable}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* File Upload */}
           <div>
             <label
-              htmlFor="file"
-              className="block text-sm font-medium text-gray-700 mb-2">
-              Ganti File PDF (Opsional)
+              htmlFor="unit_scope"
+              className="block text-sm font-medium text-gray-700 mb-1">
+              Ruang Lingkup Unit Kerja
             </label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors">
-              <div className="space-y-1 text-center">
-                <FiUpload className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600">
-                  <label
-                    htmlFor="file"
-                    className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                    <span>Pilih file PDF baru</span>
-                    <input
-                      id="file"
-                      name="file"
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleFileChange}
-                      className="sr-only"
-                    />
-                  </label>
-                  <p className="pl-1">atau drag and drop</p>
-                </div>
-                <p className="text-xs text-gray-500">PDF hingga 10MB</p>
-                {selectedFile && (
-                  <p className="text-sm text-green-600 font-medium">
-                    File dipilih: {selectedFile.name}
-                  </p>
-                )}
-              </div>
+            <select
+              id="unit_scope"
+              name="unit_scope"
+              value={formData.unit_scope}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">Pilih Unit Kerja</option>
+              {Array.isArray(units) &&
+                units.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.nama_unit}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Content Section */}
+        <div className="border-b pb-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">
+            Konten SOP
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="goals"
+                className="block text-sm font-medium text-gray-700 mb-1">
+                Tujuan *
+              </label>
+              <textarea
+                id="goals"
+                name="goals"
+                value={formData.goals}
+                onChange={handleInputChange}
+                rows={3}
+                placeholder="Tujuan dari SOP ini..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
             </div>
-            <p className="mt-2 text-sm text-gray-500">
-              <strong>Catatan:</strong> Jika Anda mengunggah file baru, file
-              lama akan diganti secara otomatis. File lama akan dihapus setelah
-              file baru berhasil diunggah.
+            <div>
+              <label
+                htmlFor="scope"
+                className="block text-sm font-medium text-gray-700 mb-1">
+                Ruang Lingkup *
+              </label>
+              <textarea
+                id="scope"
+                name="scope"
+                value={formData.scope}
+                onChange={handleInputChange}
+                rows={3}
+                placeholder="Ruang lingkup penerapan SOP..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="definition"
+                className="block text-sm font-medium text-gray-700 mb-1">
+                Definisi
+              </label>
+              <textarea
+                id="definition"
+                name="definition"
+                value={formData.definition}
+                onChange={handleInputChange}
+                rows={3}
+                placeholder="Definisi istilah-istilah yang digunakan..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="sop_reference"
+                className="block text-sm font-medium text-gray-700 mb-1">
+                Referensi
+              </label>
+              <textarea
+                id="sop_reference"
+                name="sop_reference"
+                value={formData.sop_reference}
+                onChange={handleInputChange}
+                rows={2}
+                placeholder="Dokumen referensi yang terkait..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="procedure_description"
+                className="block text-sm font-medium text-gray-700 mb-1">
+                Deskripsi Prosedur *
+              </label>
+              <textarea
+                id="procedure_description"
+                name="procedure_description"
+                value={formData.procedure_description}
+                onChange={handleInputChange}
+                rows={4}
+                placeholder="Deskripsi umum prosedur yang akan dijalankan..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Approval Section */}
+        <div className="border-b pb-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">
+            Persetujuan
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="reviewer_id"
+                className="block text-sm font-medium text-gray-700 mb-1">
+                Reviewer (Peninjau)
+              </label>
+              <select
+                id="reviewer_id"
+                name="reviewer_id"
+                value={approvalRoles.reviewer_id}
+                onChange={handleApprovalChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Pilih Reviewer</option>
+                {users
+                  .filter((user) => user.id !== login_user.id) // kecuali user yang sedang login
+                  .map((user) => (
+                    <option key={`reviewer-${user.id}`} value={user.id}>
+                      {user.name} ({user.role})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="approver_id"
+                className="block text-sm font-medium text-gray-700 mb-1">
+                Approver (Penyetuju)
+              </label>
+              <select
+                id="approver_id"
+                name="approver_id"
+                value={approvalRoles.approver_id}
+                onChange={handleApprovalChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Pilih Approver</option>
+                {users
+                  .filter(
+                    (user) =>
+                      user.id !== login_user.id &&
+                      (user.role === "admin" || user.role === "admin_unit")
+                  ) // kecuali user yang sedang login
+                  .map((user) => (
+                    <option key={`approver-${user.id}`} value={user.id}>
+                      {user.name} ({user.role})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-4 p-3 bg-gray-50 rounded-md">
+            <p className="text-sm text-gray-600">
+              <strong>Catatan:</strong> Perubahan approval roles akan
+              mempengaruhi workflow persetujuan SOP ini.
             </p>
           </div>
+        </div>
 
-          {/* Submit Buttons */}
-          <div className="flex space-x-4 pt-6">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-6 rounded-lg transition-colors flex items-center">
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Memperbarui...
-                </>
-              ) : (
-                <>
-                  <FiEdit className="mr-2" />
-                  Perbarui Dokumen
-                </>
-              )}
-            </button>
-            <Link
-              to="/docs"
-              className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-6 rounded-lg transition-colors inline-flex items-center">
-              Batal
-            </Link>
+        {/* Action Buttons */}
+        <div className="flex gap-4 pt-4">
+          <button
+            type="button"
+            onClick={() => navigate("/docs")}
+            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500">
+            Batal
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`px-6 py-2 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              isLoading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}>
+            {isLoading ? "Menyimpan..." : "Update SOP"}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(`/sop/visualisasi/${id}`)}
+            className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+            Edit Visualisasi
+          </button>
+        </div>
+      </form>
+
+      {/* Notification Component */}
+      {notification && (
+        <Notification
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(null)}
+        />
+      )}
+
+      {/* Version Type Modal untuk SOP yang sudah disahkan */}
+      {showVersionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">
+              Pilih Tipe Perubahan SOP
+            </h3>
+            <p className="text-gray-600 mb-6">
+              SOP ini sudah pernah disahkan sebelumnya. Pilih tipe perubahan
+              yang sesuai dengan modifikasi yang Anda lakukan:
+            </p>
+
+            <div className="space-y-4 mb-6">
+              {/* Minor Version */}
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="versionType"
+                  value="minor"
+                  checked={versionType === "minor"}
+                  onChange={(e) => setVersionType(e.target.value)}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-semibold text-green-700">
+                    Perubahan Minor
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    • Perbaikan kesalahan ketik
+                    <br />
+                    • Update informasi kontak
+                    <br />
+                    • Penyesuaian format yang tidak mengubah isi
+                    <br />• Penambahan lampiran non-prosedural
+                  </div>
+                </div>
+              </label>
+
+              {/* Major Version */}
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="versionType"
+                  value="major"
+                  checked={versionType === "major"}
+                  onChange={(e) => setVersionType(e.target.value)}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-semibold text-red-700">
+                    Perubahan Major
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    • Perubahan prosedur kerja
+                    <br />
+                    • Penambahan/penghapusan langkah
+                    <br />
+                    • Perubahan tanggung jawab
+                    <br />• Update kebijakan atau aturan
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowVersionModal(false);
+                  setVersionType("");
+                  setPendingFormData(null);
+                }}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleVersionUpdate}
+                disabled={!versionType || isLoading}
+                className={`px-4 py-2 text-white rounded ${
+                  !versionType || isLoading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}>
+                {isLoading ? "Menyimpan..." : "Update SOP"}
+              </button>
+            </div>
           </div>
-        </form>
-      </div>
-
-      {/* Archive Reason Modal */}
-      <ArchiveReasonModal
-        isOpen={showArchiveReasonModal}
-        onConfirm={handleArchiveReasonConfirm}
-        onCancel={handleArchiveReasonCancel}
-      />
+        </div>
+      )}
     </div>
   );
 };
 
-export default EditPdfDocPage;
+export default EditSOPPage;

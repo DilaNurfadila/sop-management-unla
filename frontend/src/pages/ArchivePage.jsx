@@ -10,26 +10,43 @@ import {
   FiFileText,
   FiFilter,
   FiSearch,
+  FiFolder,
 } from "react-icons/fi";
+import CustomModal from "../components/CustomModal";
+import { useModal } from "../hooks/useModal";
 import {
   getAllArchived,
   downloadArchivedFile,
   restoreDocument,
   deleteArchived,
   getArchiveStats,
-} from "../services/archiveApi";
+} from "../services/archiveApi.jsx";
 import { formatDateTime } from "../utils/dateFormatter";
+import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils";
 
 const ArchivePage = () => {
   const [archivedDocs, setArchivedDocs] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedArchiveId, setSelectedArchiveId] = useState(null);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmAction, setConfirmAction] = useState(null);
+
+  // Get user data untuk cek role
+  const userData = getSafeUserDataNoRedirect();
+  const isAdmin = userData?.role === "admin";
+  const isAdminUnit = userData?.role === "admin_unit";
+  const canManageArchives = isAdmin || isAdminUnit;
+
+  // Initialize modal hook
+  const {
+    modalState,
+    showDeleteConfirm,
+    showRestoreConfirm,
+    showAlert,
+    closeModal,
+    setLoading: setModalLoading,
+  } = useModal();
 
   useEffect(() => {
     fetchArchivedDocs();
@@ -39,10 +56,22 @@ const ArchivePage = () => {
   const fetchArchivedDocs = async () => {
     try {
       setLoading(true);
-      const data = await getAllArchived();
-      setArchivedDocs(data);
+      setError("");
+      const response = await getAllArchived();
+      // Pastikan kita mengambil array data dari response
+      setArchivedDocs(response.data || []);
     } catch (err) {
-      setError("Gagal memuat data arsip");
+      let errorMessage = "Gagal memuat data arsip";
+
+      if (err.message === "Akses ditolak, token tidak tersedia") {
+        errorMessage = "Anda belum login. Silakan login terlebih dahulu.";
+      } else if (err.message === "Akses ditolak") {
+        errorMessage = "Anda tidak memiliki akses ke halaman arsip.";
+      } else if (err.message) {
+        errorMessage = `Error: ${err.message}`;
+      }
+
+      setError(errorMessage);
       console.error("Error fetching archived docs:", err);
     } finally {
       setLoading(false);
@@ -51,8 +80,9 @@ const ArchivePage = () => {
 
   const fetchStats = async () => {
     try {
-      const data = await getArchiveStats();
-      setStats(data);
+      const response = await getArchiveStats();
+      // Pastikan kita mengambil data dari response
+      setStats(response.data || {});
     } catch (err) {
       console.error("Error fetching archive stats:", err);
     }
@@ -68,40 +98,73 @@ const ArchivePage = () => {
   };
 
   const handleRestore = async (archiveId) => {
-    try {
-      await restoreDocument(archiveId);
-      await fetchArchivedDocs();
-      setShowConfirmModal(false);
-      alert("Dokumen berhasil dikembalikan");
-    } catch (err) {
-      setError("Gagal mengembalikan dokumen");
-      console.error("Error restoring document:", err);
-    }
+    await showRestoreConfirm({
+      title: "Konfirmasi Restore Dokumen",
+      message:
+        "Apakah Anda yakin ingin mengembalikan dokumen ini ke daftar aktif? Dokumen akan dipindahkan dari arsip.",
+      onConfirm: async () => {
+        try {
+          setModalLoading(true);
+          await restoreDocument(archiveId);
+          await fetchArchivedDocs();
+          await fetchStats(); // Update statistics after restore
+
+          showAlert({
+            title: "Berhasil",
+            message: "Dokumen berhasil dikembalikan ke daftar aktif",
+            type: "success",
+          });
+        } catch (err) {
+          setError("Gagal mengembalikan dokumen");
+          console.error("Error restoring document:", err);
+          showAlert({
+            title: "Error",
+            message: "Gagal mengembalikan dokumen. Silakan coba lagi.",
+            type: "danger",
+          });
+        } finally {
+          setModalLoading(false);
+        }
+      },
+    });
   };
 
   const handleDelete = async (archiveId) => {
-    try {
-      await deleteArchived(archiveId);
-      await fetchArchivedDocs();
-      await fetchStats();
-      setShowConfirmModal(false);
-      alert("Dokumen arsip berhasil dihapus permanen");
-    } catch (err) {
-      setError("Gagal menghapus dokumen arsip");
-      console.error("Error deleting archived document:", err);
-    }
-  };
+    await showDeleteConfirm({
+      title: "Konfirmasi Hapus Permanen",
+      message:
+        "Apakah Anda yakin ingin menghapus dokumen arsip ini secara permanen? Tindakan ini tidak dapat dibatalkan.",
+      onConfirm: async () => {
+        try {
+          setModalLoading(true);
+          await deleteArchived(archiveId);
+          await fetchArchivedDocs();
+          await fetchStats();
 
-  const showConfirm = (action, archiveId) => {
-    setConfirmAction(action);
-    setSelectedArchiveId(archiveId);
-    setShowConfirmModal(true);
+          showAlert({
+            title: "Berhasil",
+            message: "Dokumen arsip berhasil dihapus permanen",
+            type: "success",
+          });
+        } catch (err) {
+          setError("Gagal menghapus dokumen arsip");
+          console.error("Error deleting archived document:", err);
+          showAlert({
+            title: "Error",
+            message: "Gagal menghapus dokumen arsip. Silakan coba lagi.",
+            type: "danger",
+          });
+        } finally {
+          setModalLoading(false);
+        }
+      },
+    });
   };
 
   const filteredDocs = archivedDocs.filter((doc) => {
-    const matchesSearch =
-      doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.current_title?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = doc.title
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
     const matchesCategory =
       !selectedCategory || doc.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -137,7 +200,7 @@ const ArchivePage = () => {
 
       {/* Statistics Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-md p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -154,13 +217,27 @@ const ArchivePage = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Dokumen dengan Arsip
+                  Dokumen Aktif
                 </p>
                 <p className="text-2xl font-bold text-green-600">
-                  {stats.documents_with_archives}
+                  {stats.total_active || 0}
                 </p>
               </div>
               <FiFileText className="text-3xl text-green-100" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Dokumen dengan Arsip
+                </p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {stats.documents_with_archives}
+                </p>
+              </div>
+              <FiFolder className="text-3xl text-orange-100" />
             </div>
           </div>
 
@@ -242,10 +319,10 @@ const ArchivePage = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Dokumen
+                    Dokumen Arsip
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Dokumen Saat Ini
+                    Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Info Arsip
@@ -275,7 +352,10 @@ const ArchivePage = () => {
 
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {doc.current_title || "Dokumen telah dihapus"}
+                        {doc.title} (Arsip)
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Dokumen telah diarsipkan
                       </div>
                     </td>
 
@@ -304,19 +384,25 @@ const ArchivePage = () => {
                           <FiDownload />
                         </button>
 
-                        <button
-                          onClick={() => showConfirm("restore", doc.id)}
-                          className="text-green-600 hover:text-green-800 p-2 rounded-lg hover:bg-green-50"
-                          title="Kembalikan Dokumen">
-                          <FiRotateCcw />
-                        </button>
+                        {/* Tombol Restore - hanya untuk admin dan admin_unit */}
+                        {canManageArchives && (
+                          <button
+                            onClick={() => handleRestore(doc.id)}
+                            className="text-green-600 hover:text-green-800 p-2 rounded-lg hover:bg-green-50"
+                            title="Kembalikan Dokumen">
+                            <FiRotateCcw />
+                          </button>
+                        )}
 
-                        <button
-                          onClick={() => showConfirm("delete", doc.id)}
-                          className="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50"
-                          title="Hapus Permanen">
-                          <FiTrash2 />
-                        </button>
+                        {/* Tombol Delete - hanya untuk admin dan admin_unit */}
+                        {canManageArchives && (
+                          <button
+                            onClick={() => handleDelete(doc.id)}
+                            className="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50"
+                            title="Hapus Permanen">
+                            <FiTrash2 />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -353,45 +439,19 @@ const ArchivePage = () => {
         </div>
       )}
 
-      {/* Confirmation Modal */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              {confirmAction === "restore"
-                ? "Kembalikan Dokumen"
-                : "Hapus Permanen"}
-            </h3>
-            <p className="text-gray-600 mb-6">
-              {confirmAction === "restore"
-                ? "Dokumen ini akan menggantikan versi saat ini. Versi saat ini akan diarsipkan. Lanjutkan?"
-                : "Dokumen arsip akan dihapus permanen dan tidak dapat dikembalikan. Lanjutkan?"}
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
-                Batal
-              </button>
-              <button
-                onClick={() => {
-                  if (confirmAction === "restore") {
-                    handleRestore(selectedArchiveId);
-                  } else {
-                    handleDelete(selectedArchiveId);
-                  }
-                }}
-                className={`px-4 py-2 text-white rounded-lg ${
-                  confirmAction === "restore"
-                    ? "bg-green-600 hover:bg-green-700"
-                    : "bg-red-600 hover:bg-red-700"
-                }`}>
-                {confirmAction === "restore" ? "Kembalikan" : "Hapus Permanen"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Custom Modal */}
+      <CustomModal
+        isOpen={modalState.isOpen}
+        onClose={closeModal}
+        onConfirm={modalState.onConfirm}
+        title={modalState.title}
+        message={modalState.message}
+        type={modalState.type}
+        confirmText={modalState.confirmText}
+        cancelText={modalState.cancelText}
+        showCancel={modalState.showCancel}
+        isLoading={modalState.isLoading}
+      />
     </div>
   );
 };

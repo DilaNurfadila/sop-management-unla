@@ -29,7 +29,7 @@ pool
     connection.release();
   })
   .catch((err) => {
-    console.error("Database connection failed:", err);
+    console.error("Database connection failed:", err.message);
   });
 
 // Export pool untuk digunakan di models

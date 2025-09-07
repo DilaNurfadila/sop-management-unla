@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
 // Konfigurasi axios dengan credentials
 const api = axios.create({
@@ -14,7 +15,21 @@ export const getAllUnits = async () => {
     const response = await api.get("/units");
     return response.data;
   } catch (error) {
-    throw new Error(error.response?.data?.message || "Gagal mengambil data unit");
+    throw new Error(
+      error.response?.data?.message || "Gagal mengambil data unit"
+    );
+  }
+};
+
+// Mengambil semua unit untuk registrasi (tanpa autentikasi)
+export const getAllUnitsPublic = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/units/public`);
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || "Gagal mengambil data unit"
+    );
   }
 };
 
@@ -24,7 +39,9 @@ export const getUnitById = async (id) => {
     const response = await api.get(`/units/${id}`);
     return response.data;
   } catch (error) {
-    throw new Error(error.response?.data?.message || "Gagal mengambil data unit");
+    throw new Error(
+      error.response?.data?.message || "Gagal mengambil data unit"
+    );
   }
 };
 
@@ -61,7 +78,9 @@ export const deleteUnit = async (id) => {
 // Cari unit
 export const searchUnits = async (keyword) => {
   try {
-    const response = await api.get(`/units/search?q=${encodeURIComponent(keyword)}`);
+    const response = await api.get(
+      `/units/search?q=${encodeURIComponent(keyword)}`
+    );
     return response.data;
   } catch (error) {
     throw new Error(error.response?.data?.message || "Gagal mencari unit");
@@ -74,6 +93,8 @@ export const getUnitStats = async () => {
     const response = await api.get("/units/stats");
     return response.data;
   } catch (error) {
-    throw new Error(error.response?.data?.message || "Gagal mengambil statistik unit");
+    throw new Error(
+      error.response?.data?.message || "Gagal mengambil statistik unit"
+    );
   }
 };

@@ -13,6 +13,9 @@ import { Link } from "react-router-dom";
 // Import service API untuk logout
 import { forceLogout } from "../services/authClient";
 import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
+// Import komponen modal custom
+import CustomModal from "./CustomModal";
+import { useModal } from "../hooks/useModal";
 
 /**
  * Komponen Navbar - Navigation bar untuk dashboard
@@ -24,6 +27,14 @@ const Navbar = ({ sidebarOpen }) => {
   const [isOpen, setIsOpen] = useState(false);
   // Ref untuk handle klik di luar dropdown
   const dropdownRef = useRef(null);
+
+  // Initialize modal hook
+  const {
+    modalState,
+    showDeleteConfirm,
+    closeModal,
+    setLoading: setModalLoading,
+  } = useModal();
   // Redirect ditangani oleh forceLogout helper
 
   /**
@@ -66,16 +77,39 @@ const Navbar = ({ sidebarOpen }) => {
    */
   const handleLogout = async () => {
     // Tampilkan dialog konfirmasi logout
-    const isConfirmed = window.confirm("Apakah Anda yakin ingin keluar?");
-    if (isConfirmed) {
-      try {
-        // Gunakan helper terpusat untuk panggil API logout, hapus semua data lokal, dan redirect
-        await forceLogout("/auth/login");
-      } catch (err) {
-        // Log error jika logout API gagal
-        console.error("Logout error:", err);
-      }
-    }
+    await showDeleteConfirm({
+      title: "Konfirmasi Logout",
+      message: "Apakah Anda yakin ingin keluar dari sistem?",
+      type: "logout",
+      confirmText: "Keluar",
+      cancelText: "Batal",
+      onConfirm: async () => {
+        try {
+          setModalLoading(true);
+
+          // Gunakan helper terpusat untuk panggil API logout, hapus semua data lokal, dan redirect
+          await forceLogout("/auth/login");
+        } catch (err) {
+          // Log error jika logout API gagal
+          console.error("❌ Logout error:", err);
+          try {
+            const { clearFrontendAuth } = await import(
+              "../services/authClient"
+            );
+            clearFrontendAuth();
+            window.location.replace("/auth/login");
+          } catch (clearErr) {
+            console.error("❌ Force clear error:", clearErr);
+            // Last resort: manual clear and redirect
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.replace("/auth/login");
+          }
+        } finally {
+          setModalLoading(false);
+        }
+      },
+    });
   };
 
   return (
@@ -106,6 +140,7 @@ const Navbar = ({ sidebarOpen }) => {
                     .split(" ")
                     .map((n) => n[0])
                     .join("")
+                    .substring(0, 2)
                     .toUpperCase()
                 : "U"}
             </div>
@@ -165,6 +200,20 @@ const Navbar = ({ sidebarOpen }) => {
           )}
         </div>
       </div>
+
+      {/* Custom Modal */}
+      <CustomModal
+        isOpen={modalState.isOpen}
+        onClose={closeModal}
+        onConfirm={modalState.onConfirm}
+        title={modalState.title}
+        message={modalState.message}
+        type={modalState.type}
+        confirmText={modalState.confirmText}
+        cancelText={modalState.cancelText}
+        showCancel={modalState.showCancel}
+        isLoading={modalState.isLoading}
+      />
     </header>
   );
 };

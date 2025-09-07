@@ -1,32 +1,33 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FiX, FiStar, FiMessageCircle, FiUser, FiMail } from 'react-icons/fi';
-import { createFeedback, getFeedbackBySopId } from '../services/feedbackApi';
+import React, { useState, useEffect, useCallback } from "react";
+import { FiX, FiStar, FiMessageCircle, FiUser, FiMail } from "react-icons/fi";
+import { createFeedback, getFeedbackBySopId } from "../services/feedbackApi";
+import { dateFormatter } from "../utils/dateFormatter";
 
 const FeedbackModal = ({ isOpen, onClose, sop }) => {
   const [formData, setFormData] = useState({
-    user_name: '',
-    user_email: '',
+    user_name: "",
+    user_email: "",
     rating: 0,
-    comment: ''
+    comment: "",
   });
   const [feedback, setFeedback] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [activeTab, setActiveTab] = useState('form'); // 'form' or 'feedback'
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [activeTab, setActiveTab] = useState("form"); // 'form' or 'feedback'
 
   const fetchFeedback = useCallback(async () => {
     if (!sop?.id) return;
-    
+
     try {
       setLoading(true);
       const response = await getFeedbackBySopId(sop.id);
       setFeedback(response.feedback || []);
       setStats(response.stats || {});
     } catch (err) {
-      console.error('Error fetching feedback:', err);
+      console.error("Error fetching feedback:", err);
     } finally {
       setLoading(false);
     }
@@ -40,59 +41,59 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   const handleRatingClick = (rating) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      rating
+      rating,
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.user_name || !formData.user_email || !formData.rating) {
-      setError('Nama, email, dan rating wajib diisi');
+      setError("Nama, email, dan rating wajib diisi");
       return;
     }
 
     if (formData.rating < 1 || formData.rating > 5) {
-      setError('Rating harus antara 1-5');
+      setError("Rating harus antara 1-5");
       return;
     }
 
     try {
       setSubmitting(true);
-      setError('');
-      
+      setError("");
+
       const feedbackData = {
         ...formData,
-        sop_id: sop.id
+        sop_id: sop.id,
       };
 
       await createFeedback(feedbackData);
-      setSuccess('Feedback berhasil dikirim! Terima kasih atas masukan Anda.');
-      
+      setSuccess("Feedback berhasil dikirim! Terima kasih atas masukan Anda.");
+
       // Reset form
       setFormData({
-        user_name: '',
-        user_email: '',
+        user_name: "",
+        user_email: "",
         rating: 0,
-        comment: ''
+        comment: "",
       });
-      
+
       // Refresh feedback data
       await fetchFeedback();
-      
+
       // Switch to feedback tab to show new feedback
-      setActiveTab('feedback');
+      setActiveTab("feedback");
     } catch (err) {
-      setError(err.message || 'Gagal mengirim feedback');
+      setError(err.message || "Gagal mengirim feedback");
     } finally {
       setSubmitting(false);
     }
@@ -100,14 +101,14 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
 
   const handleClose = () => {
     setFormData({
-      user_name: '',
-      user_email: '',
+      user_name: "",
+      user_email: "",
       rating: 0,
-      comment: ''
+      comment: "",
     });
-    setError('');
-    setSuccess('');
-    setActiveTab('form');
+    setError("");
+    setSuccess("");
+    setActiveTab("form");
     onClose();
   };
 
@@ -116,24 +117,16 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
       <FiStar
         key={index}
         className={`w-6 h-6 ${
-          index < rating
-            ? 'text-yellow-400 fill-current'
-            : 'text-gray-300'
-        } ${interactive ? 'cursor-pointer hover:text-yellow-400' : ''}`}
+          index < rating ? "text-yellow-400 fill-current" : "text-gray-300"
+        } ${interactive ? "cursor-pointer hover:text-yellow-400" : ""}`}
         onClick={interactive ? () => handleRatingClick(index + 1) : undefined}
       />
     ));
   };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!dateString) return "-";
+    return dateFormatter(dateString);
   };
 
   if (!isOpen) return null;
@@ -144,9 +137,7 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              Feedback SOP
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900">Feedback SOP</h2>
             <p className="text-gray-600 mt-1">
               {sop?.sop_code} - {sop?.sop_title}
             </p>
@@ -166,7 +157,7 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
                 {renderStars(Math.round(stats.average_rating || 0))}
               </div>
               <span className="text-lg font-semibold">
-                {stats.average_rating || '0.0'}
+                {stats.average_rating || "0.0"}
               </span>
             </div>
             <div className="text-gray-600">
@@ -178,20 +169,20 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
         {/* Tabs */}
         <div className="flex border-b">
           <button
-            onClick={() => setActiveTab('form')}
+            onClick={() => setActiveTab("form")}
             className={`flex-1 py-3 px-6 font-medium ${
-              activeTab === 'form'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
+              activeTab === "form"
+                ? "text-blue-600 border-b-2 border-blue-600"
+                : "text-gray-600 hover:text-gray-900"
             }`}>
             Berikan Feedback
           </button>
           <button
-            onClick={() => setActiveTab('feedback')}
+            onClick={() => setActiveTab("feedback")}
             className={`flex-1 py-3 px-6 font-medium ${
-              activeTab === 'feedback'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
+              activeTab === "feedback"
+                ? "text-blue-600 border-b-2 border-blue-600"
+                : "text-gray-600 hover:text-gray-900"
             }`}>
             Lihat Feedback ({feedback.length})
           </button>
@@ -199,7 +190,7 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
 
         {/* Content */}
         <div className="p-6 max-h-[60vh] overflow-y-auto">
-          {activeTab === 'form' && (
+          {activeTab === "form" && (
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -279,7 +270,7 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
                   type="submit"
                   disabled={submitting}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium py-3 px-4 rounded-lg transition-colors">
-                  {submitting ? 'Mengirim...' : 'Kirim Feedback'}
+                  {submitting ? "Mengirim..." : "Kirim Feedback"}
                 </button>
                 <button
                   type="button"
@@ -291,7 +282,7 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
             </form>
           )}
 
-          {activeTab === 'feedback' && (
+          {activeTab === "feedback" && (
             <div className="space-y-4">
               {loading ? (
                 <div className="text-center py-8">
@@ -309,13 +300,17 @@ const FeedbackModal = ({ isOpen, onClose, sop }) => {
                 </div>
               ) : (
                 feedback.map((item) => (
-                  <div key={item.id} className="border border-gray-200 rounded-lg p-4">
+                  <div
+                    key={item.id}
+                    className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h4 className="font-medium text-gray-900">
                           {item.user_name}
                         </h4>
-                        <p className="text-sm text-gray-600">{item.user_email}</p>
+                        <p className="text-sm text-gray-600">
+                          {item.user_email}
+                        </p>
                       </div>
                       <div className="text-right">
                         <div className="flex gap-1 mb-1">

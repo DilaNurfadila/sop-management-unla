@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import FeedbackModal from "../components/FeedbackModal";
 import { getPublishedDocs } from "../services/publicApi";
+import { downloadDocPdf } from "../services/apiPdf";
 import {
   FiSearch,
   FiFileText,
@@ -11,20 +13,22 @@ import {
   FiFilter,
   FiX,
   FiMessageCircle,
-  FiStar,
+  FiDownload,
+  FiEye,
 } from "react-icons/fi";
 
 const PublishedSOPsPage = () => {
+  const navigate = useNavigate();
   const [allSops, setAllSops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedOrganization, setSelectedOrganization] = useState("");
+  const [selectedUnit, setSelectedUnit] = useState("");
   const [sortBy, setSortBy] = useState("sop_code");
   const [sortOrder, setSortOrder] = useState("asc");
   const [feedbackModal, setFeedbackModal] = useState({
     isOpen: false,
-    selectedSop: null
+    selectedSop: null,
   });
 
   useEffect(() => {
@@ -47,7 +51,7 @@ const PublishedSOPsPage = () => {
   // Get unique organizations for filter
   const organizations = useMemo(() => {
     const orgs = [
-      ...new Set(allSops.map((sop) => sop.organization).filter(Boolean)),
+      ...new Set(allSops.map((sop) => sop.unit_scope_name).filter(Boolean)),
     ];
     return orgs.sort();
   }, [allSops]);
@@ -64,16 +68,14 @@ const PublishedSOPsPage = () => {
           (sop.sop_code && sop.sop_code.toLowerCase().includes(searchLower)) ||
           (sop.sop_title &&
             sop.sop_title.toLowerCase().includes(searchLower)) ||
-          (sop.organization &&
-            sop.organization.toLowerCase().includes(searchLower))
+          (sop.unit_scope_name &&
+            sop.unit_scope_name.toLowerCase().includes(searchLower))
       );
     }
 
-    // Organization filter
-    if (selectedOrganization) {
-      filtered = filtered.filter(
-        (sop) => sop.organization === selectedOrganization
-      );
+    // Unit filter
+    if (selectedUnit) {
+      filtered = filtered.filter((sop) => sop.unit_scope_name === selectedUnit);
     }
 
     // Sort
@@ -97,7 +99,7 @@ const PublishedSOPsPage = () => {
     });
 
     return filtered;
-  }, [allSops, searchTerm, selectedOrganization, sortBy, sortOrder]);
+  }, [allSops, searchTerm, selectedUnit, sortBy, sortOrder]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
@@ -113,27 +115,48 @@ const PublishedSOPsPage = () => {
     }
   };
 
-  const handleDownload = (url) => {
-    window.open(url, "_blank");
+  const handleDownload = async (sop) => {
+    // Navigate to the detailed view page
+    navigate(`/sop/view/${sop.id}`);
+  };
+
+  const handleDownloadFile = async (sop) => {
+    try {
+      // Gunakan endpoint download yang mencatat aktivitas saat file benar-benar diunduh
+      await downloadDocPdf(sop.id);
+    } catch (error) {
+      console.error("Error downloading document:", error);
+
+      // Show user-friendly error message
+      const errorMessage = error.message || "Gagal mengunduh dokumen";
+      alert(
+        `Error: ${errorMessage}\n\nSilakan coba lagi atau hubungi admin jika masalah berlanjut.`
+      );
+
+      // Fallback jika ada error - buka URL langsung
+      if (sop.url) {
+        window.open(sop.url, "_blank");
+      }
+    }
   };
 
   const handleOpenFeedback = (sop) => {
     setFeedbackModal({
       isOpen: true,
-      selectedSop: sop
+      selectedSop: sop,
     });
   };
 
   const handleCloseFeedback = () => {
     setFeedbackModal({
       isOpen: false,
-      selectedSop: null
+      selectedSop: null,
     });
   };
 
   const clearFilters = () => {
     setSearchTerm("");
-    setSelectedOrganization("");
+    setSelectedUnit("");
     setSortBy("sop_code");
     setSortOrder("asc");
   };
@@ -169,14 +192,14 @@ const PublishedSOPsPage = () => {
               />
             </div>
 
-            {/* Organization Filter */}
+            {/* Unit Filter */}
             <div className="relative">
               <FiFilter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <select
-                value={selectedOrganization}
-                onChange={(e) => setSelectedOrganization(e.target.value)}
+                value={selectedUnit}
+                onChange={(e) => setSelectedUnit(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                <option value="">Semua Organisasi</option>
+                <option value="">Semua Unit</option>
                 {organizations.map((org) => (
                   <option key={org} value={org}>
                     {org}
@@ -192,8 +215,8 @@ const PublishedSOPsPage = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
               <option value="sop_code">Urutkan: Kode SOP</option>
               <option value="sop_title">Urutkan: Judul</option>
-              <option value="organization">Urutkan: Organisasi</option>
-              <option value="sop_applicable">Urutkan: Tanggal Berlaku</option>
+              <option value="organization">Urutkan: Unit</option>
+              <option value="sop_applicable">Urutkan: Tanggal Efektif</option>
               <option value="sop_version">Urutkan: Versi</option>
             </select>
 
@@ -207,13 +230,30 @@ const PublishedSOPsPage = () => {
             </select>
           </div>
 
-          {/* Filter Summary and Clear */}
+          {/* Filter Summary and Quick Actions */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm text-gray-600">
               Menampilkan {filteredSops.length} dari {allSops.length} dokumen
             </div>
 
-            {(searchTerm || selectedOrganization) && (
+            {/* Quick Filter untuk SOP Universitas */}
+            <button
+              onClick={() => {
+                if (selectedUnit === "Universitas Langlangbuana") {
+                  setSelectedUnit("");
+                } else {
+                  setSelectedUnit("Universitas Langlangbuana");
+                }
+              }}
+              className={`flex items-center gap-1 text-sm px-3 py-1 rounded-full transition-colors ${
+                selectedUnit === "Universitas Langlangbuana"
+                  ? "bg-gradient-to-r from-yellow-400 to-orange-500 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-yellow-100"
+              }`}>
+              🏛️ SOP Universitas
+            </button>
+
+            {(searchTerm || selectedUnit) && (
               <button
                 onClick={clearFilters}
                 className="flex items-center gap-1 text-sm text-red-600 hover:text-red-800">
@@ -229,9 +269,9 @@ const PublishedSOPsPage = () => {
                   Pencarian: "{searchTerm}"
                 </span>
               )}
-              {selectedOrganization && (
+              {selectedUnit && (
                 <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
-                  Organisasi: {selectedOrganization}
+                  Unit: {selectedUnit}
                 </span>
               )}
             </div>
@@ -302,27 +342,47 @@ const PublishedSOPsPage = () => {
                   {/* SOP Header */}
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="bg-blue-100 text-blue-800 text-sm font-medium px-3 py-1 rounded-full">
-                        {sop.sop_code || "N/A"}
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="bg-blue-100 text-blue-800 text-sm font-medium px-3 py-1 rounded-full">
+                          {sop.sop_code || "N/A"}
+                        </span>
+                        {/* Badge khusus untuk SOP Universitas */}
+                        {sop.unit_scope_name ===
+                          "Universitas Langlangbuana" && (
+                          <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center">
+                            🏛️ UNIVERSITAS
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <h3 className="font-bold text-gray-900 text-lg leading-tight mb-2">
-                      {sop.sop_title || "Tanpa Judul"}
+                      {sop.title || "Tanpa Judul"}
                     </h3>
                   </div>
 
                   {/* SOP Details */}
                   <div className="space-y-3 mb-6 text-sm text-gray-600">
-                    {sop.organization && (
+                    {/* Unit Scope - prioritas utama */}
+                    {sop.unit_scope_name && (
                       <div className="flex items-center">
                         <FiTag className="mr-3 h-4 w-4 text-gray-400" />
-                        <span className="font-medium">{sop.organization}</span>
+                        <span className="font-medium">
+                          {sop.unit_scope_name}
+                        </span>
+                        {sop.unit_scope_name ===
+                          "Universitas Langlangbuana" && (
+                          <span className="ml-2 text-xs text-yellow-600">
+                            🏛️
+                          </span>
+                        )}
                       </div>
                     )}
                     {sop.sop_applicable && (
                       <div className="flex items-center">
                         <FiCalendar className="mr-3 h-4 w-4 text-gray-400" />
-                        <span>Berlaku: {formatDate(sop.sop_applicable)}</span>
+                        <span>
+                          Tanggal Efektif: {formatDate(sop.sop_applicable)}
+                        </span>
                       </div>
                     )}
                     {sop.sop_version && (
@@ -335,15 +395,57 @@ const PublishedSOPsPage = () => {
 
                   {/* Action Buttons */}
                   <div className="space-y-3">
-                    {sop.url && (
+                    {/* Tombol Khusus untuk SOP Universitas - Lihat Isi */}
+                    {sop.unit_scope_name === "Universitas Langlangbuana" && (
                       <button
-                        onClick={() => handleDownload(sop.url)}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
-                        <FiExternalLink className="mr-2 h-4 w-4" />
-                        Lihat Dokumen
+                        onClick={() => navigate(`/sop/public/${sop.id}`)}
+                        className="w-full bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 text-white font-bold py-4 px-4 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg flex items-center justify-center">
+                        <FiEye className="mr-2 h-5 w-5" />
+                        🏛️ Lihat Isi SOP
                       </button>
                     )}
-                    
+
+                    {/* Tombol Download untuk SOP Universitas */}
+                    {sop.unit_scope_name === "Universitas Langlangbuana" &&
+                      sop.url && (
+                        <button
+                          onClick={() => handleDownload(sop)}
+                          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+                          <FiExternalLink className="mr-2 h-4 w-4" />
+                          Buka Dokumen PDF
+                        </button>
+                      )}
+
+                    {/* Tombol Standard untuk SOP Unit lainnya */}
+                    {sop.unit_scope_name !== "Universitas Langlangbuana" && (
+                      <>
+                        <button
+                          onClick={() => navigate(`/sop/public/${sop.id}`)}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+                          <FiEye className="mr-2 h-4 w-4" />
+                          Lihat Isi SOP
+                        </button>
+
+                        {sop.url && (
+                          <button
+                            onClick={() => handleDownload(sop)}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+                            <FiExternalLink className="mr-2 h-4 w-4" />
+                            Buka Dokumen PDF
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {sop.url && (
+                      <button
+                        onClick={() => handleDownloadFile(sop)}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+                        <FiDownload className="mr-2 h-4 w-4" />
+                        Unduh Dokumen
+                      </button>
+                    )}
+
                     <button
                       onClick={() => handleOpenFeedback(sop)}
                       className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
@@ -357,7 +459,7 @@ const PublishedSOPsPage = () => {
           )}
         </div>
       </main>
-      
+
       {/* Feedback Modal */}
       <FeedbackModal
         isOpen={feedbackModal.isOpen}

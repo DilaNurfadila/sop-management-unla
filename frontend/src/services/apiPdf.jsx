@@ -4,7 +4,7 @@ import { installAuthInterceptors } from "./authClient";
 
 // Buat instance axios khusus untuk operasi PDF/file dokumen SOP
 const api = axios.create({
-  baseURL: "http://localhost:5000/api/docs", // Base URL untuk API dokumen
+  baseURL: "http://localhost:5000/api/docs", // Base URL untuk API dokumen (DIPERBAIKI: docs -> documents)
   withCredentials: true, // Enable cookies untuk authentication
 });
 
@@ -28,6 +28,86 @@ export const getDocsPdf = async () => {
     console.error("Error fetching documents:", error);
     throw new Error(
       error.response?.data?.message || "Failed to fetch documents"
+    );
+  }
+};
+
+/**
+ * Function untuk mengakses/view dokumen SOP dengan logging aktivitas
+ * @param {number} docId - ID dokumen SOP
+ * @returns {Promise<Object>} - Data dokumen dengan URL
+ * @throws {Error} - Error jika request gagal
+ */
+export const viewDocPdf = async (docId) => {
+  try {
+    const response = await api.get(`/view/${docId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error viewing document:", error);
+    throw new Error(error.response?.data?.message || "Failed to view document");
+  }
+};
+
+/**
+ * Function untuk download dokumen SOP dengan logging aktivitas yang akurat
+ * Menggunakan detection pattern browser download untuk menentukan kapan user benar-benar mengunduh
+ * @param {number} docId - ID dokumen SOP
+ * @returns {Promise<void>} - Promise yang resolve setelah download dimulai
+ * @throws {Error} - Error jika request gagal
+ */
+export const downloadDocPdf = async (docId) => {
+  try {
+    // Cek apakah user sedang authenticated dengan mencoba akses endpoint
+    try {
+      await api.get(`/${docId}`); // Test authentication
+    } catch {
+      throw new Error("Authentication required. Please login first.");
+    }
+
+    // Download file menggunakan axios dengan blob response type
+    const response = await api.get(`/download/${docId}`, {
+      responseType: "blob",
+    });
+
+    // Buat blob URL untuk download
+    const blob = new Blob([response.data], {
+      type: response.headers["content-type"] || "application/pdf",
+    });
+    const url = window.URL.createObjectURL(blob);
+
+    // Extract filename dari Content-Disposition header
+    let filename = `document_${docId}.pdf`;
+    const contentDisposition = response.headers["content-disposition"];
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(
+        /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+      );
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, "");
+      }
+    }
+
+    // Buat link download
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Cleanup blob URL
+    window.URL.revokeObjectURL(url);
+
+    return { success: true, message: "Download started successfully" };
+  } catch (error) {
+    console.error("Error downloading document:", error);
+    throw new Error(
+      error.response?.data?.message ||
+        error.message ||
+        "Failed to download document"
     );
   }
 };
@@ -137,6 +217,10 @@ export const updateFile = async (id, file, metadata, archiveReason = null) => {
     formData.append("organization", metadata.organization || "");
     formData.append("effective_date", metadata.sop_applicable || "");
     formData.append("version", metadata.version || "");
+    if (metadata.version_mode)
+      formData.append("version_mode", metadata.version_mode);
+    if (metadata.version_type)
+      formData.append("version_type", metadata.version_type);
 
     // Add archive_reason if provided
     if (archiveReason) {
@@ -212,6 +296,48 @@ export const updateDocPdfStatus = async (id, status) => {
   }
 };
 
+// Approve SOP document dan generate SOP Code
+export const approveSopDocument = async (id, userId) => {
+  try {
+    const response = await axios.post(
+      `http://localhost:5000/api/sop-documents/${id}/approve`,
+      {
+        user_id: userId,
+      },
+      {
+        withCredentials: true,
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error approving SOP document:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to approve SOP document"
+    );
+  }
+};
+
+// Update version SOP (major/minor)
+export const updateSopVersion = async (id, versionType) => {
+  try {
+    const response = await axios.patch(
+      `http://localhost:5000/api/sop-documents/${id}/version`,
+      {
+        versionType: versionType,
+      },
+      {
+        withCredentials: true,
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating SOP version:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to update SOP version"
+    );
+  }
+};
+
 // Create document (for compatibility)
 export const createDocPdf = async (docData) => {
   try {
@@ -220,6 +346,41 @@ export const createDocPdf = async (docData) => {
   } catch (error) {
     throw new Error(
       error.response?.data?.message || "Failed to create document"
+    );
+  }
+};
+
+/**
+ * Function untuk mengajukan SOP untuk pemeriksaan
+ * @param {number} sopId - ID SOP yang akan diajukan untuk pemeriksaan
+ * @returns {Promise<Object>} - Response dari server
+ * @throws {Error} - Error jika request gagal
+ */
+export const submitSopForReview = async (sopId) => {
+  try {
+    const response = await api.put(`/submit-review/${sopId}`);
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || "Failed to submit SOP for review"
+    );
+  }
+};
+
+/**
+ * Function untuk mengambil content SOP (data form yang sudah diisi)
+ * @param {number} sopId - ID SOP yang akan diambil contentnya
+ * @returns {Promise<Object>} - Data content SOP
+ * @throws {Error} - Error jika request gagal
+ */
+export const getSopContent = async (sopId) => {
+  try {
+    const response = await api.get(`/content/${sopId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching SOP content:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch SOP content"
     );
   }
 };

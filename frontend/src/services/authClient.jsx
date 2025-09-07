@@ -28,14 +28,45 @@ export const decodeJwt = (token) => {
 let logoutTimerId = null;
 let isLoggingOut = false; // guard to prevent repeated logout
 
-// Clear all local frontend auth data (sessionStorage only, token in HTTP-only cookie)
+// Clear all local frontend auth data (sessionStorage, localStorage, and any cached data)
 export const clearFrontendAuth = () => {
   try {
-    // Hanya hapus dari sessionStorage karena itu yang digunakan untuk user data
+    // Hapus dari sessionStorage
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("user");
+    sessionStorage.removeItem("userData");
+
+    // Hapus dari localStorage juga
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userData"); // Ini yang digunakan di Login.jsx
+    localStorage.removeItem("notificationSettings"); // Clear settings juga
+
+    // Clear semua keys yang mengandung token atau user
+    Object.keys(localStorage).forEach((key) => {
+      if (
+        key.includes("token") ||
+        key.includes("user") ||
+        key.includes("auth")
+      ) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    Object.keys(sessionStorage).forEach((key) => {
+      if (
+        key.includes("token") ||
+        key.includes("user") ||
+        key.includes("auth")
+      ) {
+        sessionStorage.removeItem(key);
+      }
+    });
+
+    return true;
   } catch (e) {
-    void e;
+    console.error("❌ Error clearing storage:", e);
+    return false;
   }
 };
 

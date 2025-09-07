@@ -37,64 +37,6 @@ class Auth {
     return rows[0];
   }
 
-  static async findByEmailVerify(email) {
-    const [rows] = await pool.query(
-      "SELECT * FROM email_verification WHERE (email, expired_at) IN (SELECT email, MAX(expired_at) FROM email_verification WHERE email = ? GROUP BY email)",
-      [email]
-    );
-    return rows[0];
-  }
-
-  static async findByAccessCode(access_code) {
-    const [rows] = await pool.query(
-      "SELECT * FROM email_verification WHERE access_code = ?",
-      [access_code]
-    );
-    return rows[0];
-  }
-
-  // static async getReqCount(email) {
-  //   const [rows] = await pool.query(
-  //     "SELECT email, COUNT(*) AS count FROM email_verification WHERE email = ?",
-  //     [email]
-  //   );
-  //   return rows[0];
-  // }
-
-  static async createOtp(email, access_code, expired_at) {
-    const [result] = await pool.query(
-      "INSERT INTO email_verification (email, access_code, expired_at) VALUES (?, ?, ?)",
-      [email, access_code, expired_at]
-    );
-
-    if (result.affectedRows === 1) {
-      return {
-        email: email,
-        access_code: access_code,
-        expired_at: expired_at,
-        success: true,
-      };
-    } else {
-      throw new Error("Gagal membuat OTP");
-    }
-  }
-
-  static async usedOtp(email) {
-    const [result] = await pool.query(
-      "DELETE FROM email_verification WHERE email = ?",
-      [email]
-    );
-
-    if (result.affectedRows > 0) {
-      return {
-        email: email,
-        success: true,
-      };
-    } else {
-      throw new Error("Gagal mengubah status OTP");
-    }
-  }
-
   static async updateToken(email, remember_token) {
     const [result] = await pool.query(
       "UPDATE users SET remember_token = ? WHERE email = ?",

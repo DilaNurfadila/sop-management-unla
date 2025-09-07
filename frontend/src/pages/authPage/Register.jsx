@@ -1,5 +1,5 @@
 // Import React hooks untuk state management
-import { useState } from "react";
+import { useState, useEffect } from "react";
 // Import React Router hooks untuk navigasi dan location state
 import { Link, useNavigate } from "react-router-dom";
 // Import icons dari react-icons
@@ -16,6 +16,8 @@ import {
 } from "react-icons/fi";
 // Import API service untuk registrasi user
 import { registerUser } from "../../services/authApi";
+// Import API untuk mendapatkan data unit
+import { getAllUnitsPublic } from "../../services/unitApi";
 
 /**
  * Komponen Register untuk registrasi user baru
@@ -35,6 +37,10 @@ const Register = () => {
     unit: "",
   });
 
+  // State untuk data units
+  const [units, setUnits] = useState([]);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+
   // State untuk show/hide password
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -43,6 +49,23 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   // State untuk error message
   const [error, setError] = useState("");
+
+  // Fetch units data saat komponen mount
+  useEffect(() => {
+    const fetchUnits = async () => {
+      try {
+        setUnitsLoading(true);
+        const unitsData = await getAllUnitsPublic();
+        setUnits(unitsData.units || unitsData);
+      } catch (error) {
+        console.error("Error fetching units:", error);
+      } finally {
+        setUnitsLoading(false);
+      }
+    };
+
+    fetchUnits();
+  }, []);
 
   /**
    * Handler untuk perubahan input form
@@ -212,16 +235,23 @@ const Register = () => {
               <FiUsers className="mr-2" size={16} />
               Unit Kerja
             </label>
-            <input
-              type="text"
+            <select
               id="unit"
               name="unit"
               value={formData.unit}
               onChange={handleChange}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-              placeholder="Masukkan unit kerja"
               required
-            />
+              disabled={unitsLoading}>
+              <option value="">
+                {unitsLoading ? "Memuat unit..." : "Pilih unit kerja"}
+              </option>
+              {units.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.nama_unit}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Password */}

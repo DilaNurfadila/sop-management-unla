@@ -71,7 +71,7 @@ class Feedback {
       SELECT 
         f.*,
         s.sop_code,
-        s.sop_title
+        s.title as sop_title
       FROM sop_feedback f
       LEFT JOIN sop_documents s ON f.sop_id = s.id
       ORDER BY f.created_at DESC

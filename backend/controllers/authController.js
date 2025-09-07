@@ -7,10 +7,7 @@ const ActivityLog = require("../models/ActivityLog");
 // Import model PasswordReset untuk operasi reset password
 const PasswordReset = require("../models/PasswordReset");
 // Import service email untuk verifikasi dan forgot password
-const {
-  sendVerification,
-  sendForgotPasswordEmail,
-} = require("../config/emailService");
+const { sendForgotPasswordEmail } = require("../config/emailService");
 // Import crypto untuk generate random number
 const crypto = require("crypto");
 // Import crypto-js untuk enkripsi/dekripsi
@@ -62,17 +59,8 @@ const logAuthActivity = async (
       targetData ? "auth" : null
     );
   } catch (error) {
-    console.error("Error logging auth activity:", error.message);
     // Tidak throw error agar tidak mengganggu flow utama
   }
-};
-
-/**
- * Function untuk generate OTP 6 digit random
- * @returns {string} - OTP 6 digit dalam format string
- */
-const generateOtp = () => {
-  return crypto.randomInt(100000, 999999).toString();
 };
 
 /**
@@ -92,15 +80,118 @@ const generateToken = (user) => {
  * Function untuk set JWT token sebagai HTTP cookie
  * @param {Object} res - Response object dari Express
  * @param {string} token - JWT token yang akan disimpan dalam cookie
+ * @param {Object} req - Request object untuk mendapatkan origin
  */
-const setTokenCookie = (res, token) => {
-  res.cookie("token", token, {
-    httpOnly: true, // Cookie tidak bisa diakses via JavaScript
-    secure: process.env.NODE_ENV === "production", // Hanya dikirim melalui HTTPS di production
-    sameSite: "strict", // Perlindungan terhadap CSRF attacks
-    maxAge: 3600000, // 1 jam dalam milidetik
+const setTokenCookie = (res, token, req = null) => {
+  // Tentukan nama cookie berdasarkan origin untuk menghindari konflik antar port
+  let cookieName = "token";
+
+  if (req && req.headers.origin) {
+    const origin = req.headers.origin;
+    if (origin.includes(":5174")) {
+      cookieName = "token_5174";
+    } else if (origin.includes(":5173")) {
+      cookieName = "token_5173";
+    }
+    // Default tetap "token" untuk origin lainnya
+  }
+
+  // Konfigurasi cookie yang berbeda untuk development dan production
+  const isProduction = process.env.NODE_ENV === "production";
+
+  const cookieOptions = {
+    httpOnly: true, // Cookie tidak bisa diakses via JavaScript (keamanan XSS)
+    secure: isProduction, // Hanya dikirim melalui HTTPS di production
+    sameSite: isProduction ? "strict" : "lax", // Strict di production, Lax di development
+    maxAge: 3600000, // 1 jam dalam milidetik (1000ms * 60s * 60m)
     path: "/", // Cookie tersedia untuk semua path
-  });
+
+    // Development specific settings
+    ...(isProduction
+      ? {}
+      : {
+          // Di development, tambahkan domain localhost untuk compatibility
+          domain: req?.headers?.host?.includes("localhost")
+            ? "localhost"
+            : undefined,
+        }),
+
+    // Production specific settings
+    ...(isProduction
+      ? {
+          // Di production, bisa set domain spesifik
+          domain: process.env.COOKIE_DOMAIN || undefined,
+          // Tambahan flag secure untuk production
+          secure: true,
+          sameSite: "strict",
+        }
+      : {}),
+  };
+
+  // Log cookie configuration di development
+  if (!isProduction) {
+  }
+
+  res.cookie(cookieName, token, cookieOptions);
+
+  // Return nama cookie yang digunakan untuk referensi
+  return cookieName;
+};
+
+/**
+ * Function untuk clear JWT token cookie dari browser
+ * @param {Object} res - Response object dari Express
+ * @param {Object} req - Request object untuk mendapatkan origin
+ * @returns {string} - Nama cookie yang di-clear
+ */
+const clearTokenCookie = (res, req = null) => {
+  // Tentukan nama cookie berdasarkan origin (sama dengan setTokenCookie)
+  let cookieName = "token";
+
+  if (req && req.headers.origin) {
+    const origin = req.headers.origin;
+    if (origin.includes(":5174")) {
+      cookieName = "token_5174";
+    } else if (origin.includes(":5173")) {
+      cookieName = "token_5173";
+    }
+  }
+
+  // Konfigurasi cookie yang sama dengan setTokenCookie untuk clear yang proper
+  const isProduction = process.env.NODE_ENV === "production";
+
+  const clearOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "strict" : "lax",
+    path: "/",
+
+    // Development specific settings
+    ...(isProduction
+      ? {}
+      : {
+          domain: req?.headers?.host?.includes("localhost")
+            ? "localhost"
+            : undefined,
+        }),
+
+    // Production specific settings
+    ...(isProduction
+      ? {
+          domain: process.env.COOKIE_DOMAIN || undefined,
+          secure: true,
+          sameSite: "strict",
+        }
+      : {}),
+  };
+
+  // Log cookie clearing di development
+  if (!isProduction) {
+  }
+
+  res.clearCookie(cookieName, clearOptions);
+
+  return cookieName;
 };
 
 /**
@@ -126,182 +217,7 @@ const safeEncrypt = (data) => {
 
     return iv.toString(cryptojs.enc.Hex) + ":" + encrypted;
   } catch (error) {
-    console.error("Encryption error:", error);
     return null;
-  }
-};
-
-/**
- * Controller untuk request OTP verifikasi email
- * @param {Object} req - Request object (berisi email)
- * @param {Object} res - Response object dari Express
- */
-exports.requestOtp = async (req, res) => {
-  try {
-    // Ekstrak email dari request body
-    const { email } = req.body;
-
-    // Generate OTP 6 digit random
-    const access_code = generateOtp();
-
-    // Set waktu expired OTP (1 menit dari sekarang)
-    const currentDate = new Date();
-    const expired_at = new Date(currentDate.getTime() + 1 * 60 * 1000);
-    const formattedExpiresAt = format(expired_at, "yyyy-MM-dd HH:mm:ss");
-
-    // Simpan OTP ke database
-    const reqOtp = await Auth.createOtp(email, access_code, formattedExpiresAt);
-
-    // Kirim OTP ke email user
-    await sendVerification(email, access_code, formattedExpiresAt);
-
-    // Kirim response sukses
-    res.status(201).json({ message: "OTP created successfully", reqOtp });
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-};
-
-/**
- * Controller untuk verifikasi OTP yang dikirim user
- * @param {Object} req - Request object (berisi email dan access_code)
- * @param {Object} res - Response object dari Express
- */
-exports.verifyOtp = async (req, res) => {
-  try {
-    // Ekstrak email dan OTP dari request body
-    const { email, access_code } = req.body;
-
-    // Validasi input yang diperlukan
-    if (!email || !access_code) {
-      return res
-        .status(400)
-        .json({ message: "Email and access code are required" });
-    }
-
-    // Cari record OTP berdasarkan email
-    const otpRecord = await Auth.findByEmailVerify(email);
-    if (!otpRecord) {
-      return res.status(404).json({
-        message: "OTP record not found or expired. please request again",
-      });
-    }
-
-    // Validasi apakah OTP yang dimasukkan sesuai
-    if (otpRecord.access_code !== access_code) {
-      return res.status(400).json({ message: "Invalid access code" });
-    }
-
-    // Cek apakah OTP sudah expired
-    if (new Date() > new Date(otpRecord.expired_at)) {
-      // Tandai OTP sebagai used jika expired
-      await Auth.usedOtp(email);
-      return res
-        .status(400)
-        .json({ message: "OTP has expired, please request again" });
-    }
-
-    // Cek apakah user sudah terdaftar di sistem
-    const user = await Auth.findByEmail(email);
-    if (!user) {
-      return res.status(303).json({
-        message: "Please complete registration",
-        redirect: "/auth/register",
-        email, // Kirim email untuk proses registrasi
-      });
-    }
-
-    // Jika user belum melengkapi nama (registrasi belum selesai)
-    if (!user.name) {
-      // Buat temporary token untuk akses registrasi
-      const tempToken = generateToken({
-        id: user.id,
-        email: user.email,
-        role: "unregistered",
-      });
-      setTokenCookie(res, tempToken);
-      return res.status(200).json({ requiresRegistration: true });
-    }
-
-    // Generate JWT token untuk user yang sudah terdaftar lengkap
-    const token = generateToken(user);
-    setTokenCookie(res, token);
-
-    try {
-      // Enkripsi data sensitif untuk keamanan
-      const iv = cryptojs.lib.WordArray.random(16); // Generate random IV
-      const key = cryptojs.enc.Hex.parse(process.env.KEY); // Parse encryption key
-
-      // Validasi environment variable KEY
-      if (!process.env.KEY) {
-        throw new Error("Encryption key not found in environment variables");
-      }
-
-      // Helper function untuk enkripsi yang aman
-      const safeEncrypt = (data) => {
-        const dataString = data ? data.toString() : "";
-        const encrypted = cryptojs.AES.encrypt(dataString, key, {
-          mode: cryptojs.mode.CBC,
-          iv: iv,
-        }).toString();
-        return iv.toString(cryptojs.enc.Hex) + ":" + encrypted;
-      };
-
-      // Enkripsi semua data user dengan validasi
-      const emailEncryptedSave = safeEncrypt(user.email);
-      const nameEncryptedSave = safeEncrypt(user.name);
-      const roleEncryptedSave = safeEncrypt(user.role);
-      const unitEncryptedSave = safeEncrypt(user.unit);
-      const positionEncryptedSave = safeEncrypt(user.position);
-
-      // Tandai OTP sebagai sudah digunakan
-      await Auth.usedOtp(email);
-
-      // Simpan/update refresh token di database
-      await Auth.updateToken(email, token);
-
-      // Kirim response sukses dengan token dan data user yang dienkripsi
-      res.status(200).json({
-        message: "Login successful",
-        token, // Token untuk API requests
-        user: {
-          id: user.id, // ID tidak dienkripsi untuk referensi
-          email: emailEncryptedSave, // Email yang sudah dienkripsi
-          name: nameEncryptedSave, // Nama yang sudah dienkripsi
-          role: roleEncryptedSave, // Role yang sudah dienkripsi
-          unit: unitEncryptedSave, // Unit yang sudah dienkripsi
-          position: positionEncryptedSave, // Position yang sudah dienkripsi
-        },
-      });
-    } catch (encryptionError) {
-      console.error("Encryption error:", encryptionError);
-
-      // Fallback: kirim data tanpa enkripsi jika enkripsi gagal
-      await Auth.usedOtp(email);
-      await Auth.updateToken(email, token);
-
-      res.status(200).json({
-        message: "Login successful",
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          unit: user.unit || "",
-          position: user.position || "",
-        },
-      });
-    }
-  } catch (error) {
-    console.error("VerifyOtp error:", error);
-    console.error("Error stack:", error.stack);
-    console.error("Request body:", req.body);
-
-    res.status(400).json({
-      message: error.message,
-      error: process.env.NODE_ENV === "development" ? error.stack : undefined,
-    });
   }
 };
 
@@ -369,7 +285,7 @@ exports.register = async (req, res) => {
     });
 
     // Set token sebagai cookie
-    setTokenCookie(res, token);
+    setTokenCookie(res, token, req);
 
     // Log aktivitas registrasi berhasil
     await logAuthActivity(
@@ -393,7 +309,6 @@ exports.register = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Registration error:", error);
     res.status(400).json({
       message: error.message || "Terjadi kesalahan saat registrasi",
     });
@@ -407,26 +322,35 @@ exports.register = async (req, res) => {
  */
 exports.logout = async (req, res) => {
   try {
-    // Ambil data user dari request (dari middleware auth jika ada)
+    // Ambil data user lengkap dari database
     let userData = null;
+    let userId = null;
+
+    // Cek apakah ada user dari middleware auth
     if (req.user) {
-      userData = req.user;
+      userId = req.user.id;
     } else {
-      // Coba decode token untuk mendapatkan data user
+      // Coba decode token untuk mendapatkan user ID
       try {
-        const token = req.cookies.token;
+        // Pastikan req.cookies ada sebelum mengakses property
+        const token = req.cookies ? req.cookies.token : null;
         if (token) {
           const decoded = jwt.verify(token, process.env.JWT_SECRET);
-          const user = await User.findById(decoded.id);
-          if (user) {
-            userData = user;
-          }
+          userId = decoded.id;
+        }
+      } catch (e) {}
+    }
+
+    // Jika ada user ID, ambil data lengkap dari database
+    if (userId) {
+      try {
+        const fullUserData = await User.findById(userId);
+        if (fullUserData) {
+          userData = fullUserData;
         }
       } catch (e) {
-        console.warn(
-          "Tidak dapat mendecode token untuk logging logout:",
-          e.message
-        );
+        // Fallback ke data dari req.user jika ada
+        userData = req.user;
       }
     }
 
@@ -438,7 +362,6 @@ exports.logout = async (req, res) => {
       }
     } catch (e) {
       // Jangan blokir logout hanya karena gagal menghapus token DB
-      console.warn("Gagal menghapus token dari DB saat logout:", e.message);
     }
 
     // Log aktivitas logout jika userData tersedia
@@ -451,18 +374,16 @@ exports.logout = async (req, res) => {
       );
     }
 
-    // Hapus token cookie dari browser
-    res.clearCookie("token", {
-      httpOnly: true, // Cookie tidak bisa diakses via JavaScript
-      secure: process.env.NODE_ENV === "production", // Hanya HTTPS di production
-      sameSite: "strict", // Perlindungan CSRF
-      path: "/", // Path yang sama dengan saat set cookie
-    });
+    // Hapus token cookie dari browser menggunakan helper function
+    const clearedCookie = clearTokenCookie(res, req);
+
+    // Log success di development
+    if (process.env.NODE_ENV !== "production") {
+    }
 
     // Kirim response sukses logout
     res.status(200).json({ message: "Logout successful" });
   } catch (error) {
-    console.error("Logout error:", error);
     res.status(500).json({
       message: "Logout failed",
       error: error.message,
@@ -518,7 +439,7 @@ exports.login = async (req, res) => {
     });
 
     // Set token sebagai HTTP cookie
-    setTokenCookie(res, token);
+    setTokenCookie(res, token, req);
 
     // Enkripsi data user untuk response
     const encryptedUserData = {
@@ -545,7 +466,6 @@ exports.login = async (req, res) => {
       token: token,
     });
   } catch (error) {
-    console.error("Login error:", error);
     res.status(500).json({
       message: "Terjadi kesalahan saat login",
       error: error.message,
@@ -609,8 +529,6 @@ exports.forgotPassword = async (req, res) => {
         message: "Link reset password telah dikirim ke email Anda",
       });
     } catch (emailError) {
-      console.error("Error sending reset email:", emailError);
-
       // Hapus token dari database jika gagal kirim email
       await PasswordReset.deleteByToken(resetToken);
 
@@ -619,7 +537,6 @@ exports.forgotPassword = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Forgot password error:", error);
     res.status(500).json({
       message: "Terjadi kesalahan saat memproses permintaan",
       error: error.message,
@@ -686,7 +603,6 @@ exports.resetPassword = async (req, res) => {
       message: "Password berhasil direset",
     });
   } catch (error) {
-    console.error("Reset password error:", error);
     res.status(500).json({
       message: "Terjadi kesalahan saat reset password",
       error: error.message,

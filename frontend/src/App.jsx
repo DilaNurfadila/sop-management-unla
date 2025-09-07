@@ -7,6 +7,8 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+// Import global CSS styles
+import "./App.css";
 
 // Import auth client untuk bootstrap authentication
 import { bootstrapAuthClient } from "./services/authClient";
@@ -16,7 +18,6 @@ import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import ListDocsPage from "./pages/docPages/ListDocsPage";
-import AddDocPage from "./pages/docPages/AddDocPage";
 import EditPdfDocPage from "./pages/docPages/EditPdfDocPage";
 import Login from "./pages/authPage/Login";
 import Register from "./pages/authPage/Register";
@@ -26,10 +27,25 @@ import Home from "./pages/Home";
 import Contact from "./pages/Contact";
 import About from "./pages/About";
 import PublishedSOPsPage from "./pages/PublishedSOPsPage";
+import SOPByUnitPage from "./pages/SOPByUnitPage";
 import ArchivePage from "./pages/ArchivePage";
 import UserManagementPage from "./pages/UserManagementPage";
 import UnitManagementPage from "./pages/UnitManagementPage";
 import ActivityLogsPage from "./pages/ActivityLogsPage";
+import SopFlowchartPage from "./pages/SopFlowchartPage";
+import CreateSOPForm from "./pages/sopPages/CreateSOPForm";
+import AssignSopCreatorPage from "./pages/sopPages/AssignSopCreatorPage";
+import AssignmentManagementPage from "./pages/sopPages/AssignmentManagementPage";
+import MyAssignmentsPage from "./pages/sopPages/MyAssignmentsPage";
+import ViewSOPDocument from "./pages/sopPages/ViewSOPDocument";
+import PublicSOPViewer from "./pages/PublicSOPViewer";
+import SOPVisualizationLandingPage from "./pages/sopPages/SOPVisualizationLandingPage.jsx";
+import ReviewDashboard from "./pages/review/ReviewDashboard";
+import ReviewSopPage from "./pages/review/ReviewSopPage";
+import CreateSOPVizPage from "./pages/sopPages/CreateSOPVizPage";
+import ManageSOPVizPage from "./pages/sopPages/ManageSOPVizPage";
+import FlowchartVisualizationPage from "./pages/sopPages/FlowchartVisualizationPage";
+import RevisionRequestManagement from "./pages/RevisionRequestManagement";
 import ProtectedRoute from "./components/ProtectedRoute";
 // Auth checks rely on HTTP-only cookies; token is not stored client-side
 import { getSafeUserDataNoRedirect } from "./utils/cryptoUtils.jsx";
@@ -60,7 +76,6 @@ function App() {
 
     // Jika tidak ada user, redirect ke login. Validasi lanjutan dilakukan server via cookie
     if (!user) {
-      console.log("No user data found, redirecting to login");
       return <Navigate to="/auth/login" />;
     }
 
@@ -80,7 +95,16 @@ function App() {
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/sop" element={<PublishedSOPsPage />} />
-
+        <Route path="/sop/public/:id" element={<PublicSOPViewer />} />
+        <Route path="/sop/by-unit" element={<SOPByUnitPage />} />
+        {/* <Route path="/sopvis" element={<SOPVizListPage />} /> */}
+        <Route path="/sopvis/:id" element={<SOPVisualizationLandingPage />} />
+        <Route path="/sopvis/create" element={<CreateSOPVizPage />} />
+        <Route path="/sopvis/:id/manage" element={<ManageSOPVizPage />} />
+        <Route
+          path="/sopvis/:id/flowchart"
+          element={<FlowchartVisualizationPage />}
+        />
         {/* Protected Routes (dengan layout) - memerlukan authentication */}
         <Route
           element={
@@ -108,15 +132,7 @@ function App() {
             }
           />
           <Route
-            path="/docs/add"
-            element={
-              <PrivateRoute>
-                <AddDocPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/docs/edit-pdf/:id"
+            path="/docs/edit/:id"
             element={
               <PrivateRoute>
                 <EditPdfDocPage />
@@ -174,6 +190,92 @@ function App() {
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <ActivityLogsPage />
                 </ProtectedRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/revision-requests"
+            element={
+              <PrivateRoute>
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <RevisionRequestManagement />
+                </ProtectedRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/sop-flowchart"
+            element={
+              <PrivateRoute>
+                <SopFlowchartPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/sop/create"
+            element={
+              <PrivateRoute>
+                <CreateSOPForm />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/sop/assign-creator"
+            element={
+              <PrivateRoute>
+                <ProtectedRoute allowedRoles={["admin", "admin_unit"]}>
+                  <AssignSopCreatorPage />
+                </ProtectedRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/sop/assignment-management"
+            element={
+              <PrivateRoute>
+                <ProtectedRoute allowedRoles={["admin", "admin_unit"]}>
+                  <AssignmentManagementPage />
+                </ProtectedRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/my-assignments"
+            element={
+              <PrivateRoute>
+                <MyAssignmentsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/sop/view/:id"
+            element={
+              <PrivateRoute>
+                <ViewSOPDocument />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/sop/visualisasi/:id"
+            element={
+              <PrivateRoute>
+                <SopFlowchartPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/review"
+            element={
+              <PrivateRoute>
+                <ReviewDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/review/sop/:id"
+            element={
+              <PrivateRoute>
+                <ReviewSopPage />
               </PrivateRoute>
             }
           />

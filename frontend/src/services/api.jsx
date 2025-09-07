@@ -12,7 +12,8 @@ installAuthInterceptors();
 
 // Buat instance axios dengan konfigurasi default
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: "http://localhost:5000/api", // Base URL yang lebih general untuk semua endpoints
+  withCredentials: true,
 });
 
 /**
@@ -23,7 +24,7 @@ const api = axios.create({
 export const getDocs = async () => {
   try {
     // Request GET ke endpoint untuk semua dokumen
-    const response = await api.get(`${API_URL}`);
+    const response = await api.get("/docs");
     return response.data;
   } catch (error) {
     // Handle error dengan message yang user-friendly
@@ -42,7 +43,7 @@ export const getDocs = async () => {
 export const getDoc = async (id) => {
   try {
     // Request GET ke endpoint dengan parameter ID
-    const response = await api.get(`${API_URL}/${id}`);
+    const response = await api.get(`/docs/${id}`);
     return response.data;
   } catch (error) {
     // Handle error dengan message yang sesuai
@@ -73,7 +74,7 @@ export const getDoc = async (id) => {
 export const createDoc = async (docData) => {
   try {
     // Request POST untuk membuat dokumen baru
-    const response = await api.post(`${API_URL}/`, docData);
+    const response = await api.post("/docs/", docData);
     return response.data;
   } catch (error) {
     // Handle error dengan message yang spesifik untuk create operation
@@ -93,7 +94,7 @@ export const createDoc = async (docData) => {
 export const updateDoc = async (id, docData) => {
   try {
     // Request PUT untuk update dokumen berdasarkan ID
-    const response = await api.put(`${API_URL}/${id}`, docData);
+    const response = await api.put(`/docs/${id}`, docData);
     return response.data;
   } catch (error) {
     // Handle error dengan message yang spesifik untuk update operation
@@ -131,7 +132,7 @@ export const publishDoc = async (id) => {
 export const unpublishDoc = async (id) => {
   try {
     // Request PUT ke endpoint unpublish dengan ID dokumen
-    const response = await api.put(`${API_URL}/unpublish/${id}`);
+    const response = await api.put(`/docs/unpublish/${id}`);
     return response.data;
   } catch (error) {
     throw new Error(
@@ -142,7 +143,7 @@ export const unpublishDoc = async (id) => {
 
 export const deleteDoc = async (id) => {
   try {
-    const response = await api.delete(`${API_URL}/${id}`);
+    const response = await api.delete(`/docs/${id}`);
     return response.data;
   } catch (error) {
     throw new Error(
@@ -150,3 +151,40 @@ export const deleteDoc = async (id) => {
     );
   }
 };
+
+/**
+ * Function untuk mengambil SOP berdasarkan unit kerja pengguna yang login
+ * @returns {Promise<Object>} - Response dengan data SOP sesuai unit user
+ * @throws {Error} - Error jika request gagal
+ */
+export const getSopByUserUnit = async () => {
+  try {
+    const response = await api.get("/docs/my-unit");
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message ||
+        "Failed to fetch SOP documents by user unit"
+    );
+  }
+};
+
+/**
+ * Function untuk mengambil SOP berdasarkan unit tertentu
+ * @param {string|number} unitId - ID unit kerja
+ * @returns {Promise<Object>} - Response dengan data SOP sesuai unit
+ * @throws {Error} - Error jika request gagal
+ */
+export const getSopByUnit = async (unitId) => {
+  try {
+    const response = await api.get(`/docs/by-unit/${unitId}`);
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch SOP documents by unit"
+    );
+  }
+};
+
+// Export default axios instance untuk digunakan oleh komponen lain
+export default api;

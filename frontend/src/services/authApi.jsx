@@ -11,51 +11,6 @@ axios.defaults.withCredentials = true;
 installAuthInterceptors();
 
 /**
- * Function untuk request OTP ke email user
- * @param {string} email - Email address user yang akan menerima OTP
- * @returns {Promise<Object>} - Response dari server atau error object
- */
-export const requestOtp = async (email) => {
-  try {
-    // Request POST untuk generate dan kirim OTP ke email
-    const response = await axios.post(`${API_URL}/request-otp`, { email });
-    return response.data;
-  } catch (error) {
-    // Return error object dengan informasi yang konsisten
-    return {
-      error: true,
-      status: error.response?.status,
-      message: error.response?.data?.message || "Failed to request OTP",
-    };
-  }
-};
-
-/**
- * Function untuk verifikasi OTP yang dimasukkan user
- * @param {string} email - Email address user
- * @param {string} access_code - Kode OTP 6 digit yang dimasukkan user
- * @returns {Promise<Object>} - Response dari server dengan token atau error object
- */
-export const verifyOtp = async (email, access_code) => {
-  try {
-    // Request POST untuk verifikasi OTP
-    const response = await axios.post(`${API_URL}/verify-otp`, {
-      email,
-      access_code,
-    });
-    // Cookie HTTP-only sudah di-set oleh backend; tidak menyimpan token di storage
-    return response.data;
-  } catch (error) {
-    // Return error object dengan informasi yang konsisten
-    return {
-      error: true,
-      status: error.response?.status,
-      message: error.response?.data?.message || "Failed to verify otp",
-    };
-  }
-};
-
-/**
  * Function untuk registrasi user baru dengan data lengkap
  * @param {Object} data - Data registrasi user (name, role, organization, position)
  * @returns {Promise<Object>} - Response dari server dengan token atau error object

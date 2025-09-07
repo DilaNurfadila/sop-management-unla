@@ -38,9 +38,7 @@ const logUnitActivity = async (
       targetData?.id || null,
       targetData ? "unit" : null
     );
-  } catch (error) {
-    console.error("Error logging unit activity:", error.message);
-    // Tidak throw error agar tidak mengganggu flow utama
+  } catch (error) {// Tidak throw error agar tidak mengganggu flow utama
   }
 };
 
@@ -53,9 +51,24 @@ exports.getAllUnits = async (req, res) => {
       message: "Data unit berhasil diambil",
       units: units,
     });
-  } catch (error) {
-    console.error("Error in getAllUnits:", error.message);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
+      success: false,
+      message: "Gagal mengambil data unit",
+      error: error.message,
+    });
+  }
+};
+
+// Mengambil semua unit untuk registrasi (tanpa autentikasi)
+exports.getAllUnitsPublic = async (req, res) => {
+  try {
+    const units = await Unit.findAll();
+    res.status(200).json({
+      success: true,
+      message: "Data unit berhasil diambil",
+      units: units,
+    });
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal mengambil data unit",
       error: error.message,
@@ -81,9 +94,7 @@ exports.getUnitById = async (req, res) => {
       message: "Data unit berhasil diambil",
       unit: unit,
     });
-  } catch (error) {
-    console.error("Error in getUnitById:", error.message);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal mengambil data unit",
       error: error.message,
@@ -140,10 +151,7 @@ exports.createUnit = async (req, res) => {
       message: "Unit berhasil dibuat",
       unit: newUnit,
     });
-  } catch (error) {
-    console.error("Error in createUnit:", error.message);
-
-    if (error.message.includes("sudah digunakan")) {
+  } catch (error) {if (error.message.includes("sudah digunakan")) {
       return res.status(409).json({
         success: false,
         message: error.message,
@@ -219,10 +227,7 @@ exports.updateUnit = async (req, res) => {
       message: "Unit berhasil diupdate",
       unit: updatedUnit,
     });
-  } catch (error) {
-    console.error("Error in updateUnit:", error.message);
-
-    if (error.message.includes("tidak ditemukan")) {
+  } catch (error) {if (error.message.includes("tidak ditemukan")) {
       return res.status(404).json({
         success: false,
         message: error.message,
@@ -289,10 +294,7 @@ exports.deleteUnit = async (req, res) => {
       success: true,
       message: "Unit berhasil dihapus",
     });
-  } catch (error) {
-    console.error("Error in deleteUnit:", error.message);
-
-    if (error.message.includes("tidak ditemukan")) {
+  } catch (error) {if (error.message.includes("tidak ditemukan")) {
       return res.status(404).json({
         success: false,
         message: error.message,
@@ -327,9 +329,7 @@ exports.searchUnits = async (req, res) => {
       units: units,
       keyword: q.trim(),
     });
-  } catch (error) {
-    console.error("Error in searchUnits:", error.message);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal mencari unit",
       error: error.message,
@@ -347,9 +347,7 @@ exports.getUnitStats = async (req, res) => {
       message: "Statistik unit berhasil diambil",
       stats: stats,
     });
-  } catch (error) {
-    console.error("Error in getUnitStats:", error.message);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal mengambil statistik unit",
       error: error.message,

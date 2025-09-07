@@ -27,9 +27,7 @@ const safeEncrypt = (data) => {
     }).toString();
 
     return iv.toString(cryptojs.enc.Hex) + ":" + encrypted;
-  } catch (error) {
-    console.error("Encryption error:", error);
-    return null;
+  } catch (error) {return null;
   }
 };
 
@@ -70,9 +68,7 @@ const logUserActivity = async (
       targetData?.id || null,
       targetData ? "user" : null
     );
-  } catch (error) {
-    console.error("Error logging user activity:", error.message);
-    // Tidak throw error agar tidak mengganggu flow utama
+  } catch (error) {// Tidak throw error agar tidak mengganggu flow utama
   }
 };
 
@@ -80,8 +76,11 @@ exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.findAllUsers();
 
-    // Log aktivitas melihat daftar users (hanya untuk admin)
-    if (req.user && req.user.role === "admin") {
+    // Log aktivitas melihat daftar users (hanya untuk admin atau admin_unit)
+    if (
+      req.user &&
+      (req.user.role === "admin" || req.user.role === "admin_unit")
+    ) {
       await logUserActivity(
         req.user,
         "VIEW",
@@ -236,9 +235,7 @@ exports.updateUserProfile = async (req, res) => {
         unit: encryptedData.unit,
       },
     });
-  } catch (error) {
-    console.error("Error updating profile:", error);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       message: "Terjadi kesalahan saat memperbarui profil",
     });
   }
@@ -305,9 +302,7 @@ exports.changePassword = async (req, res) => {
     res.status(200).json({
       message: "Password berhasil diubah",
     });
-  } catch (error) {
-    console.error("Error changing password:", error);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       message: "Terjadi kesalahan saat mengubah password",
     });
   }
@@ -321,9 +316,7 @@ exports.changePassword = async (req, res) => {
 exports.getAllUsersForAdmin = async (req, res) => {
   try {
     // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {
-      console.log("Access denied - user role is not admin:", req.user.role);
-      return res.status(403).json({
+    if (req.user.role !== "admin") {return res.status(403).json({
         success: false,
         message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
       });
@@ -347,9 +340,7 @@ exports.getAllUsersForAdmin = async (req, res) => {
       success: true,
       users: safeUsers,
     });
-  } catch (error) {
-    console.error("Error in getAllUsersForAdmin:", error);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal mengambil data pengguna",
     });
@@ -362,9 +353,7 @@ exports.getAllUsersForAdmin = async (req, res) => {
 exports.getUserStats = async (req, res) => {
   try {
     // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {
-      console.log("Access denied - user role is not admin:", req.user.role);
-      return res.status(403).json({
+    if (req.user.role !== "admin") {return res.status(403).json({
         success: false,
         message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
       });
@@ -372,21 +361,23 @@ exports.getUserStats = async (req, res) => {
 
     const users = await User.findAllUsers();
 
-    // Hitung statistik berdasarkan role
+    // Filter keluar admin dari perhitungan statistik
+    const nonAdminUsers = users.filter((user) => user.role !== "admin");
+
+    // Hitung statistik berdasarkan role (tanpa admin)
     const stats = {
-      total: users.length,
-      admin: users.filter((user) => user.role === "admin").length,
-      admin_unit: users.filter((user) => user.role === "admin_unit").length,
-      user: users.filter((user) => user.role === "user").length,
+      total: nonAdminUsers.length, // Total tanpa admin
+      admin: 0, // Admin tidak dihitung
+      admin_unit: nonAdminUsers.filter((user) => user.role === "admin_unit")
+        .length,
+      user: nonAdminUsers.filter((user) => user.role === "user").length,
     };
 
     res.status(200).json({
       success: true,
       stats: stats,
     });
-  } catch (error) {
-    console.error("Error in getUserStats:", error);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal mengambil statistik pengguna",
     });
@@ -425,8 +416,8 @@ exports.deleteUserByAdmin = async (req, res) => {
       });
     }
 
-    // Pengecualian: Jangan biarkan menghapus pengguna admin
-    if (userToDelete.role === "admin") {
+    // Pengecualian: Jangan biarkan menghapus pengguna admin atau admin_unit
+    if (userToDelete.role === "admin" || userToDelete.role === "admin_unit") {
       return res.status(400).json({
         success: false,
         message: "Akun admin tidak dapat dihapus untuk keamanan sistem",
@@ -450,9 +441,7 @@ exports.deleteUserByAdmin = async (req, res) => {
       success: true,
       message: "Pengguna berhasil dihapus",
     });
-  } catch (error) {
-    console.error("Error in deleteUserByAdmin:", error);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal menghapus pengguna",
     });
@@ -501,8 +490,8 @@ exports.updateUserRole = async (req, res) => {
       });
     }
 
-    // Pengecualian: Jangan biarkan mengubah role pengguna admin
-    if (userToUpdate.role === "admin") {
+    // Pengecualian: Jangan biarkan mengubah role pengguna admin atau admin_unit
+    if (userToUpdate.role === "admin" || userToUpdate.role === "admin_unit") {
       return res.status(400).json({
         success: false,
         message: "Role admin tidak dapat diubah untuk keamanan sistem",
@@ -528,9 +517,7 @@ exports.updateUserRole = async (req, res) => {
       success: true,
       message: "Role pengguna berhasil diubah",
     });
-  } catch (error) {
-    console.error("Error in updateUserRole:", error);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal mengubah role pengguna",
     });
@@ -577,9 +564,7 @@ exports.searchUsers = async (req, res) => {
       success: true,
       users: safeUsers,
     });
-  } catch (error) {
-    console.error("Error in searchUsers:", error);
-    res.status(500).json({
+  } catch (error) {res.status(500).json({
       success: false,
       message: "Gagal mencari pengguna",
     });

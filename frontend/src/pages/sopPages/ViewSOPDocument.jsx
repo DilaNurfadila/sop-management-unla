@@ -205,9 +205,9 @@ const ViewSOPDocument = () => {
         // Coba ambil data SOP dengan public endpoint dulu (untuk published SOP)
         let contentResponse;
         try {
-        } catch (publicError) {
+          contentResponse = await getPublishedSopContent(id);
+        } catch {
           // Jika gagal dengan public endpoint, coba dengan authenticated endpoint
-
           try {
             contentResponse = await getSopContent(id);
           } catch (authError) {
@@ -220,8 +220,14 @@ const ViewSOPDocument = () => {
           getColsApi(id),
           getSopsApi(id),
         ]);
-        setSopData(contentResponse.data);
-        setLatestApprovedRevision(contentResponse.data?.revision_date);
+        
+        // Validasi contentResponse sebelum mengakses data
+        if (contentResponse && contentResponse.data) {
+          setSopData(contentResponse.data);
+          setLatestApprovedRevision(contentResponse.data?.revision_date);
+        } else {
+          throw new Error("Data SOP tidak ditemukan atau tidak valid");
+        }
 
         // Handle items response
         const itemsData = itemsResponse.data || itemsResponse;

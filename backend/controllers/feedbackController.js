@@ -42,7 +42,8 @@ const logFeedbackActivity = async (
       targetData?.id || null,
       targetData ? "feedback" : null
     );
-  } catch (error) {// Tidak throw error agar tidak mengganggu flow utama
+  } catch (error) {
+    // Tidak throw error agar tidak mengganggu flow utama
   }
 };
 
@@ -118,7 +119,8 @@ exports.createFeedback = async (req, res) => {
       message: "Feedback berhasil disimpan",
       data: result,
     });
-  } catch (error) {res.status(500).json({ message: error.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -146,7 +148,8 @@ exports.getFeedbackBySopId = async (req, res) => {
         total_feedback: stats.total_feedback || 0,
       },
     });
-  } catch (error) {res.status(500).json({ message: error.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -186,7 +189,8 @@ exports.getAllFeedback = async (req, res) => {
 
     // Kirim response dengan data feedback yang sudah dilengkapi info uploader
     res.status(200).json(feedbackWithUploader);
-  } catch (error) {res.status(500).json({ message: error.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -221,7 +225,8 @@ exports.deleteFeedback = async (req, res) => {
 
     // Kirim response sukses
     res.status(200).json({ message: "Feedback berhasil dihapus" });
-  } catch (error) {res.status(500).json({ message: error.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -283,6 +288,80 @@ exports.updateFeedback = async (req, res) => {
       message: "Feedback berhasil diperbarui",
       data: result,
     });
-  } catch (error) {res.status(500).json({ message: error.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * Controller untuk membalas feedback oleh admin/admin_unit
+ * Endpoint: POST /feedback/:id/reply
+ */
+exports.replyFeedback = async (req, res) => {
+  try {
+    const { id: feedbackId } = req.params;
+    const { response } = req.body;
+    const user = req.user;
+
+    // Validasi role - hanya admin dan admin_unit yang bisa reply
+    if (!["admin", "admin_unit"].includes(user.role)) {
+      return res.status(403).json({
+        message:
+          "Akses ditolak. Hanya admin dan admin unit yang dapat membalas feedback.",
+      });
+    }
+
+    if (!response || !response.trim()) {
+      return res.status(400).json({
+        message: "Response tidak boleh kosong",
+      });
+    }
+
+    // Get feedback data untuk email
+    const feedbackData = await Feedback.getFeedbackById(feedbackId);
+    if (!feedbackData) {
+      return res.status(404).json({ message: "Feedback tidak ditemukan" });
+    }
+
+    // Update feedback dengan response (status tetap "pending" atau "replied")
+    const updatedFeedback = await Feedback.updateFeedbackStatus(
+      feedbackId,
+      "replied",
+      response,
+      user.id
+    );
+
+    // Send email to user yang memberikan feedback
+    const emailService = require("../config/emailService");
+    try {
+      await emailService.sendFeedbackResponse({
+        to: feedbackData.user_email,
+        userName: feedbackData.user_name,
+        sopTitle: feedbackData.sop_title,
+        feedbackComment: feedbackData.comment,
+        adminResponse: response,
+        respondedBy: user.name,
+      });
+    } catch (emailError) {
+      console.error("Error sending email:", emailError);
+      // Don't fail the operation if email fails
+    }
+
+    // Log activity
+    await logFeedbackActivity(
+      user,
+      "REPLY_FEEDBACK",
+      `Membalas feedback untuk SOP "${feedbackData.sop_title}" dari ${feedbackData.user_name}`,
+      req,
+      { id: feedbackId }
+    );
+
+    res.status(200).json({
+      message: "Balasan feedback berhasil dikirim",
+      data: updatedFeedback,
+    });
+  } catch (error) {
+    console.error("Error replying feedback:", error);
+    res.status(500).json({ message: error.message });
   }
 };

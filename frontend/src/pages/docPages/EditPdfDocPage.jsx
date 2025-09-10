@@ -4,22 +4,15 @@ import {
   updateSopDocument,
   getSopDocumentById,
 } from "../../services/flowchartApi";
-// Import 'updateSopVersion' dihapus karena tidak digunakan lagi
-import { getUsers } from "../../services/userApi";
-import { getAllUnits } from "../../services/unitApi";
 import { FiArrowLeft } from "react-icons/fi";
 import Notification from "../../components/Notification";
-import { getSafeUserDataNoRedirect } from "../../utils/cryptoUtils.jsx";
+// Approval roles & unit scope are set at assignment; no selection here
 
 const EditSOPPage = () => {
-  const login_user = getSafeUserDataNoRedirect();
-
   const navigate = useNavigate();
   const { id } = useParams();
   const [isLoading, setIsLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [users, setUsers] = useState([]);
-  const [units, setUnits] = useState([]);
   const [notification, setNotification] = useState(null);
 
   // State untuk versioning SOP yang sudah pernah disahkan
@@ -34,16 +27,9 @@ const EditSOPPage = () => {
     title: "",
     goals: "",
     scope: "",
-    unit_scope: "",
     definition: "",
     sop_reference: "",
     procedure_description: "",
-  });
-
-  // Data untuk approval roles
-  const [approvalRoles, setApprovalRoles] = useState({
-    reviewer_id: "",
-    approver_id: "",
   });
 
   // Load SOP data dan user list
@@ -70,32 +56,13 @@ const EditSOPPage = () => {
           title: sopData.title || "",
           goals: sopData.goals || "",
           scope: sopData.scope || "",
-          unit_scope: sopData.unit_scope || "", // Ini sekarang berisi ID unit
           definition: sopData.definition || "",
           sop_reference: sopData.sop_reference || "",
           procedure_description: sopData.procedure_description || "",
           // 'version' dan 'status' tidak lagi di-set
         });
-
-        // Set approval roles data dari response
-        setApprovalRoles({
-          reviewer_id: sopData.reviewer_id || "",
-          approver_id: sopData.approver_id || "",
-        });
-
-        // Load user list
-        const userList = await getUsers();
-        setUsers(userList);
-
-        // Load units list untuk dropdown
-        const unitResponse = await getAllUnits();
-        // API mengembalikan data dalam format { units: [...] }
-        const unitsArray = unitResponse.units || [];
-        setUnits(unitsArray);
       } catch (error) {
         console.error("Error loading data:", error);
-        // Set empty array untuk units jika gagal load
-        setUnits([]);
         alert("Error loading SOP data: " + (error.message || "Unknown error"));
         navigate("/docs");
       } finally {
@@ -117,15 +84,6 @@ const EditSOPPage = () => {
     }));
   };
 
-  // Handle approval roles change
-  const handleApprovalChange = (e) => {
-    const { name, value } = e.target;
-    setApprovalRoles((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
   // Fungsi handleVersionUpdate dihapus seluruhnya
 
   // Handle form submit
@@ -134,7 +92,7 @@ const EditSOPPage = () => {
 
     // Jika SOP sudah pernah disahkan, tampilkan modal versioning
     if (wasEverPublished) {
-      setPendingFormData({ ...formData, ...approvalRoles });
+      setPendingFormData({ ...formData });
       setShowVersionModal(true);
       return;
     }
@@ -142,10 +100,7 @@ const EditSOPPage = () => {
     // Jika belum pernah disahkan (draft pertama), update langsung
     setIsLoading(true);
     try {
-      const completeData = {
-        ...formData,
-        ...approvalRoles,
-      };
+      const completeData = { ...formData };
 
       await updateSopDocument(id, completeData);
       setNotification({
@@ -172,10 +127,7 @@ const EditSOPPage = () => {
     setShowVersionModal(false);
 
     try {
-      const completeData = {
-        ...pendingFormData,
-        version_type: versionType, // Kirim info tipe versi ke backend
-      };
+      const completeData = { ...pendingFormData, version_type: versionType };
 
       await updateSopDocument(id, completeData);
 
@@ -293,27 +245,7 @@ const EditSOPPage = () => {
 
           {/* Field Status Dihapus */}
 
-          <div>
-            <label
-              htmlFor="unit_scope"
-              className="block text-sm font-medium text-gray-700 mb-1">
-              Ruang Lingkup Unit Kerja
-            </label>
-            <select
-              id="unit_scope"
-              name="unit_scope"
-              value={formData.unit_scope}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Pilih Unit Kerja</option>
-              {Array.isArray(units) &&
-                units.map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.nama_unit}
-                  </option>
-                ))}
-            </select>
-          </div>
+          {/* Ruang Lingkup Unit Kerja dipilih saat penugasan, tidak dapat diubah di sini */}
         </div>
 
         {/* Content Section */}
@@ -408,68 +340,7 @@ const EditSOPPage = () => {
           </div>
         </div>
 
-        {/* Approval Section */}
-        <div className="border-b pb-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            Persetujuan
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label
-                htmlFor="reviewer_id"
-                className="block text-sm font-medium text-gray-700 mb-1">
-                Reviewer (Peninjau)
-              </label>
-              <select
-                id="reviewer_id"
-                name="reviewer_id"
-                value={approvalRoles.reviewer_id}
-                onChange={handleApprovalChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">Pilih Reviewer</option>
-                {users
-                  .filter((user) => user.id !== login_user.id) // kecuali user yang sedang login
-                  .map((user) => (
-                    <option key={`reviewer-${user.id}`} value={user.id}>
-                      {user.name} ({user.role})
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div>
-              <label
-                htmlFor="approver_id"
-                className="block text-sm font-medium text-gray-700 mb-1">
-                Approver (Penyetuju)
-              </label>
-              <select
-                id="approver_id"
-                name="approver_id"
-                value={approvalRoles.approver_id}
-                onChange={handleApprovalChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">Pilih Approver</option>
-                {users
-                  .filter(
-                    (user) =>
-                      user.id !== login_user.id &&
-                      (user.role === "admin" || user.role === "admin_unit")
-                  ) // kecuali user yang sedang login
-                  .map((user) => (
-                    <option key={`approver-${user.id}`} value={user.id}>
-                      {user.name} ({user.role})
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
-          <div className="mt-4 p-3 bg-gray-50 rounded-md">
-            <p className="text-sm text-gray-600">
-              <strong>Catatan:</strong> Perubahan approval roles akan
-              mempengaruhi workflow persetujuan SOP ini.
-            </p>
-          </div>
-        </div>
+        {/* Persetujuan dipilih saat penugasan (admin/admin_unit), tidak dapat diubah di sini */}
 
         {/* Action Buttons */}
         <div className="flex gap-4 pt-4">

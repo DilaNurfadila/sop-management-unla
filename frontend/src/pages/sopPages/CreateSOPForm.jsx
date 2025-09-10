@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { createSopDocument } from "../../services/flowchartApi";
 import { getUsers } from "../../services/userApi";
 import { getAssignmentsForUser } from "../../services/sopCreatorApi";
-import { getAllUnits } from "../../services/unitApi";
 // Import crypto utility functions
 import { getSafeUserDataNoRedirect } from "../../utils/cryptoUtils.jsx";
 
@@ -14,7 +13,6 @@ const CreateSOPForm = () => {
   const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [users, setUsers] = useState([]);
-  const [units, setUnits] = useState([]);
 
   // State untuk assignment validation
   const [assignmentCheck, setAssignmentCheck] = useState({
@@ -29,11 +27,10 @@ const CreateSOPForm = () => {
     title: "", // judul SOP
     goals: "", // tujuan (dulu objective)
     scope: "", // ruang lingkup
-    unit_scope: "", // ruang lingkup unit kerja
     definition: "", // definisi
     sop_reference: "", // referensi (dulu reference)
     procedure_description: "", // deskripsi prosedur
-    status: "Draft", // default status
+    status: "draft", // default status
   });
 
   // Data untuk approval roles
@@ -49,16 +46,8 @@ const CreateSOPForm = () => {
         // Load users untuk reviewer dan approver
         const userList = await getUsers();
         setUsers(userList);
-
-        // Load units untuk dropdown unit_scope
-        const unitResponse = await getAllUnits();
-        // API mengembalikan data dalam format { units: [...] }
-        const unitsArray = unitResponse.units || [];
-        setUnits(unitsArray);
       } catch (error) {
         console.error("Error loading data:", error);
-        // Set empty array untuk units jika gagal load
-        setUnits([]);
       }
     };
     loadData();
@@ -116,6 +105,16 @@ const CreateSOPForm = () => {
           title: `${activeAssignment.notes}`,
           goals: `Membuat SOP berdasarkan penugasan: ${activeAssignment.notes}`,
         }));
+
+        // Auto-fill reviewer dan approver dari assignment data
+        if (activeAssignment.reviewer_id && activeAssignment.approver_id) {
+          setApprovalRoles({
+            reviewer_id: activeAssignment.reviewer_id.toString(),
+            approver_id: activeAssignment.approver_id.toString(),
+          });
+        }
+
+        // unit_scope ditentukan saat penugasan → tidak perlu input di form
       } catch (error) {
         console.error("Error validating assignment:", error);
         setAssignmentCheck({
@@ -161,8 +160,8 @@ const CreateSOPForm = () => {
         return;
       }
 
-      // Jika submit untuk review, validasi reviewer dan approver
-      if (submitForReview) {
+      // Jika submit untuk review, validasi reviewer dan approver (hanya jika bukan dari assignment)
+      if (submitForReview && !assignmentCheck.hasActiveAssignment) {
         if (!approvalRoles.reviewer_id) {
           alert("Pemeriksa harus dipilih untuk mengajukan review!");
           setIsLoading(false);
@@ -175,13 +174,25 @@ const CreateSOPForm = () => {
         }
       }
 
+      // Tentukan unit_scope yang akan dikirim:
+      // - gunakan dari form jika diisi
+      // - jika kosong, fallback ke assignment.unit_scope bila tersedia
+      const unitScopeFromAssignment =
+        assignmentCheck.assignmentData?.unit_scope;
+      const normalizedUnitScope =
+        unitScopeFromAssignment !== undefined &&
+        unitScopeFromAssignment !== null
+          ? Number(unitScopeFromAssignment)
+          : null;
+
       // Prepare data untuk sop_documents table (SOP Code dan Version akan di-generate otomatis)
       const sopDocumentData = {
         ...formData,
+        unit_scope: normalizedUnitScope,
         ...approvalRoles, // Include reviewer_id dan approver_id
         sop_code: null, // SOP Code akan di-generate setelah disahkan
         assignment_id: assignmentCheck.assignmentData?.id || null, // Link ke assignment
-        status: submitForReview ? "submitted_for_review" : "Draft", // Set status berdasarkan aksi
+        status: submitForReview ? "submitted_for_review" : "draft", // Set status berdasarkan aksi
       };
 
       // Create SOP document
@@ -302,29 +313,6 @@ const CreateSOPForm = () => {
                   />
                 </div>
               </div>
-
-              <div className="mt-4">
-                <label
-                  htmlFor="unit_scope"
-                  className="block text-sm font-medium text-gray-700 mb-1">
-                  Ruang Lingkup Unit Kerja *
-                </label>
-                <select
-                  id="unit_scope"
-                  name="unit_scope"
-                  value={formData.unit_scope}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required>
-                  <option value="">Pilih Unit Kerja</option>
-                  {Array.isArray(units) &&
-                    units.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.nama_unit}
-                      </option>
-                    ))}
-                </select>
-              </div>
             </div>
 
             {/* Content Section */}
@@ -424,77 +412,80 @@ const CreateSOPForm = () => {
               </div>
             </div>
 
-            {/* Approval Section */}
-            <div className="border-b pb-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">
-                Persetujuan
-              </h2>
+            {/* Approval Section - Hidden when creating from assignment */}
+            {!assignmentCheck.hasActiveAssignment && (
+              <div className="border-b pb-6">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">
+                  Persetujuan
+                </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label
-                    htmlFor="reviewer_id"
-                    className="block text-sm font-medium text-gray-700 mb-1">
-                    Reviewer (Peninjau)
-                  </label>
-                  <select
-                    id="reviewer_id"
-                    name="reviewer_id"
-                    value={approvalRoles.reviewer_id}
-                    onChange={handleApprovalChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">Pilih Reviewer</option>
-                    {users
-                      .filter((user) => user.id !== login_user.id) // kecuali user yang sedang login
-                      .map((user) => (
-                        <option key={`reviewer-${user.id}`} value={user.id}>
-                          {user.name} ({user.role})
-                        </option>
-                      ))}
-                  </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      htmlFor="reviewer_id"
+                      className="block text-sm font-medium text-gray-700 mb-1">
+                      Reviewer (Peninjau)
+                    </label>
+                    <select
+                      id="reviewer_id"
+                      name="reviewer_id"
+                      value={approvalRoles.reviewer_id}
+                      onChange={handleApprovalChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Pilih Reviewer</option>
+                      {users
+                        .filter((user) => user.id !== login_user.id) // kecuali user yang sedang login
+                        .map((user) => (
+                          <option key={`reviewer-${user.id}`} value={user.id}>
+                            {user.name} ({user.role})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="approver_id"
+                      className="block text-sm font-medium text-gray-700 mb-1">
+                      Approver (Penyetuju)
+                    </label>
+                    <select
+                      id="approver_id"
+                      name="approver_id"
+                      value={approvalRoles.approver_id}
+                      onChange={handleApprovalChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Pilih Approver</option>
+                      {users
+                        .filter(
+                          (user) =>
+                            user.id !== login_user.id &&
+                            (user.role === "admin" ||
+                              user.role === "admin_unit")
+                        ) // kecuali user yang sedang login
+                        .map((user) => (
+                          <option key={`approver-${user.id}`} value={user.id}>
+                            {user.name} ({user.role})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="approver_id"
-                    className="block text-sm font-medium text-gray-700 mb-1">
-                    Approver (Penyetuju)
-                  </label>
-                  <select
-                    id="approver_id"
-                    name="approver_id"
-                    value={approvalRoles.approver_id}
-                    onChange={handleApprovalChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">Pilih Approver</option>
-                    {users
-                      .filter(
-                        (user) =>
-                          user.id !== login_user.id &&
-                          (user.role === "admin" || user.role === "admin_unit")
-                      ) // kecuali user yang sedang login
-                      .map((user) => (
-                        <option key={`approver-${user.id}`} value={user.id}>
-                          {user.name} ({user.role})
-                        </option>
-                      ))}
-                  </select>
+                <div className="mt-4 p-3 bg-gray-50 rounded-md">
+                  <p className="text-sm text-gray-600">
+                    <strong>Catatan:</strong> Pembuat SOP akan secara otomatis
+                    tercatat sebagai Creator. SOP Code dan Version akan
+                    di-generate otomatis oleh sistem. Version dimulai dari 1.0
+                    untuk SOP baru, dan akan auto-increment untuk revisi.
+                    <br />
+                    <strong>Status:</strong> SOP baru akan dibuat dengan status
+                    "Draft" dan perlu melalui proses review dan approval untuk
+                    dapat dipublikasikan.
+                  </p>
                 </div>
               </div>
-
-              <div className="mt-4 p-3 bg-gray-50 rounded-md">
-                <p className="text-sm text-gray-600">
-                  <strong>Catatan:</strong> Pembuat SOP akan secara otomatis
-                  tercatat sebagai Creator. SOP Code dan Version akan
-                  di-generate otomatis oleh sistem. Version dimulai dari 1.0
-                  untuk SOP baru, dan akan auto-increment untuk revisi.
-                  <br />
-                  <strong>Status:</strong> SOP baru akan dibuat dengan status
-                  "Draft" dan perlu melalui proses review dan approval untuk
-                  dapat dipublikasikan.
-                </p>
-              </div>
-            </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-4 pt-4">

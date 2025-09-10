@@ -4,8 +4,6 @@ const SopArchive = require("../models/SopArchive");
 const ActivityLog = require("../models/ActivityLog");
 // Mengimpor model SopDoc untuk operasi dengan dokumen SOP
 const SopDoc = require("../models/SopDoc");
-// Mengimpor axios untuk HTTP requests ke Firebase Storage
-const axios = require("axios");
 
 // Membuat fungsi untuk mendapatkan semua dokumen yang diarsipkan
 const getAllArchivedDocs = async (req, res) => {
@@ -15,27 +13,8 @@ const getAllArchivedDocs = async (req, res) => {
     // Mendapatkan semua dokumen yang diarsipkan beserta informasi pengguna terkait
     let archivedDocs = await SopArchive.getAllArchivedDocs();
 
-    // Filter berdasarkan role user
-    if (role === "admin") {
-      // Admin bisa lihat semua dokumen archived
-      // Tidak perlu filter tambahan
-    } else if (role === "admin_unit") {
-      // Admin unit hanya bisa lihat dokumen archived dari unit mereka
-      archivedDocs = archivedDocs.filter(
-        (doc) =>
-          doc.unit_scope && parseInt(doc.unit_scope) === parseInt(userUnit)
-      );
-    } else if (role === "user") {
-      // User biasa hanya bisa lihat dokumen archived yang mereka buat sendiri
-      // atau dokumen published yang diarsipkan dari unit mereka
-      archivedDocs = archivedDocs.filter(
-        (doc) =>
-          (doc.creator_id && parseInt(doc.creator_id) === parseInt(userId)) ||
-          (doc.unit_scope &&
-            parseInt(doc.unit_scope) === parseInt(userUnit) &&
-            doc.status === "published")
-      );
-    }
+    // Perubahan: Semua role (admin, admin_unit, user) dapat melihat seluruh dokumen arsip.
+    // Tidak ada filtering tambahan berdasarkan role/unit agar pengguna biasa juga bisa melihat semua arsip.
 
     res.status(200).json({ success: true, data: archivedDocs });
   } catch (error) {
@@ -50,8 +29,11 @@ const getAllArchivedDocs = async (req, res) => {
 // Membuat fungsi untuk mendapatkan statistik arsip
 const getArchiveStats = async (req, res) => {
   try {
-    // Mendapatkan statistik arsip dari database
-    const stats = await SopArchive.getArchiveStats();
+    // Ambil user data untuk filtering berdasarkan unit
+    const { role, unit } = req.user;
+
+    // Mendapatkan statistik arsip dari database dengan filtering unit
+    const stats = await SopArchive.getArchiveStats(role, unit);
     res.status(200).json({ success: true, data: stats });
   } catch (error) {
     console.error("Error getting archive stats:", error);
@@ -170,7 +152,16 @@ const archiveSop = async (req, res) => {
 const restoreSopFromArchive = async (req, res) => {
   try {
     const { id: archiveId } = req.params; // Perbaiki dari archiveId ke id
-    const { id: userId } = req.user;
+    const { id: userId, role } = req.user;
+
+    // Hanya admin atau admin_unit yang diperbolehkan melakukan restore
+    if (role !== "admin" && role !== "admin_unit") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Hanya admin atau admin unit yang dapat melakukan restore dokumen",
+      });
+    }
 
     // Mendapatkan data arsip
     const archiveData = await SopArchive.getArchiveById(archiveId);

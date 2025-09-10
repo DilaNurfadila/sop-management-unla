@@ -35,6 +35,7 @@ const ListDocsPage = () => {
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [selectedDocumentForArchive, setSelectedDocumentForArchive] =
     useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Get user data untuk cek role dan ID
   const userData = getSafeUserDataNoRedirect();
@@ -78,14 +79,7 @@ const ListDocsPage = () => {
     return isCreator;
   };
 
-  const isSubmitted = (file) => {
-    if (!userData) return false;
-
-    // Cek berdasarkan berbagai field yang mungkin ada
-    const isSubmitted = file.review_status === "submitted_for_review";
-
-    return isSubmitted;
-  };
+  // (Removed isSubmitted helper; logic is inlined where needed)
 
   // FUNCTION BARU: Cek apakah user boleh melihat dokumen
   const canViewDocument = (file) => {
@@ -347,6 +341,21 @@ const ListDocsPage = () => {
     setSelectedDocumentForArchive(null);
   };
 
+  // Function untuk filter dokumen berdasarkan search term
+  const filteredPdfFiles = pdfFiles.filter((file) => {
+    if (!searchTerm) return true;
+
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      file.sop_title?.toLowerCase().includes(searchLower) ||
+      file.sop_code?.toLowerCase().includes(searchLower) ||
+      file.uploader_name?.toLowerCase().includes(searchLower) ||
+      file.organization?.toLowerCase().includes(searchLower) ||
+      file.status?.toLowerCase().includes(searchLower) ||
+      file.review_status?.toLowerCase().includes(searchLower)
+    );
+  });
+
   const formatDate = (dateString) => {
     if (!dateString) return "-";
     return dateFormatter(dateString);
@@ -390,6 +399,40 @@ const ListDocsPage = () => {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <div className="flex items-center space-x-4">
+            <div className="flex-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FiFileText className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Cari berdasarkan judul, kode SOP, penyusun, unit, atau status..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                <FiX className="h-4 w-4 mr-1" />
+                Clear
+              </button>
+            )}
+          </div>
+          {searchTerm && (
+            <div className="mt-3 text-sm text-gray-600">
+              Menampilkan {filteredPdfFiles.length} dari {pdfFiles.length}{" "}
+              dokumen untuk "{searchTerm}"
+            </div>
+          )}
         </div>
 
         {/* Unit Info Card */}
@@ -494,19 +537,28 @@ const ListDocsPage = () => {
 
         {/* Main Content */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          {pdfFiles.length === 0 ? (
+          {filteredPdfFiles.length === 0 ? (
             <div className="text-center py-12">
               <FiFileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Belum ada dokumen
+                {searchTerm ? "Tidak ada hasil pencarian" : "Belum ada dokumen"}
               </h3>
               <p className="text-gray-500 mb-4">
-                {isAdmin
+                {searchTerm
+                  ? `Tidak ditemukan dokumen yang sesuai dengan "${searchTerm}"`
+                  : isAdmin
                   ? "Tidak ada dokumen SOP yang tersedia di sistem saat ini"
                   : isAdminUnit
                   ? "Tidak ada dokumen SOP yang tersedia untuk unit kerja Anda saat ini"
                   : "Tidak ada dokumen SOP yang tersedia saat ini"}
               </p>
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                  Lihat Semua Dokumen
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -540,7 +592,7 @@ const ListDocsPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {pdfFiles.map((file, index) => (
+                  {filteredPdfFiles.map((file, index) => (
                     <tr
                       key={`sop-${file.id}-${index}`}
                       className="hover:bg-gray-50">
@@ -606,11 +658,7 @@ const ListDocsPage = () => {
                         <div className="flex items-center">
                           <FiCalendar className="mr-1 h-4 w-4" />
                           {file.approval_date ? (
-                            formatDate(
-                              file.creation_date ||
-                                file.created_date ||
-                                file.created_at
-                            )
+                            formatDate(file.approval_date)
                           ) : (
                             <span className="text-gray-400 italic">
                               Belum disahkan
@@ -621,7 +669,12 @@ const ListDocsPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex items-center">
                           <FiCalendar className="mr-1 h-4 w-4" />
-                          {file.effective_date ? (
+                          {/* Tampilkan tanggal efektif hanya jika SOP sudah disahkan */}
+                          {file.effective_date &&
+                          file.approval_date &&
+                          (file.status === "published" ||
+                            file.status === "unpublished") &&
+                          file.review_status === "approved" ? (
                             formatDate(file.effective_date)
                           ) : (
                             <span className="text-gray-400 italic">
@@ -633,11 +686,12 @@ const ListDocsPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex items-center">
                           <FiCalendar className="mr-1 h-4 w-4" />
+                          {/* Tampilkan tanggal revisi jika ada dan setelah tanggal pengesahan */}
                           {file.revision_date ? (
                             formatDate(file.revision_date)
                           ) : (
                             <span className="text-gray-400 italic">
-                              Tidak ada revisi
+                              Belum ada revisi
                             </span>
                           )}
                         </div>
@@ -663,15 +717,33 @@ const ListDocsPage = () => {
                               </button>
                             )}
 
+                          {/* Revisi Button - khusus untuk penyusun saat SOP sudah disahkan */}
+                          {isSOPCreator(file) &&
+                            file.review_status === "approved" && (
+                              <button
+                                onClick={() =>
+                                  navigate(`/docs/edit/${file.id}`)
+                                }
+                                className="text-purple-600 hover:text-purple-800 p-2 rounded-lg hover:bg-purple-50"
+                                title="Revisi SOP (Minor/Major)">
+                                <FiEdit2 />
+                              </button>
+                            )}
+
                           {/* TOMBOL EDIT - HANYA UNTUK PENYUSUN SOP */}
-                          {isSOPCreator(file) && !isSubmitted(file) && (
-                            <Link
-                              to={`/docs/edit/${file.id}`}
-                              className="text-yellow-600 hover:text-yellow-800 p-2 rounded-lg hover:bg-yellow-50"
-                              title="Edit SOP">
-                              <FiEdit2 />
-                            </Link>
-                          )}
+                          {isSOPCreator(file) &&
+                            ![
+                              "submitted_for_review",
+                              "reviewer_approved",
+                              "approved",
+                            ].includes(file.review_status) && (
+                              <Link
+                                to={`/docs/edit/${file.id}`}
+                                className="text-yellow-600 hover:text-yellow-800 p-2 rounded-lg hover:bg-yellow-50"
+                                title="Edit SOP">
+                                <FiEdit2 />
+                              </Link>
+                            )}
 
                           {/* Publish/Unpublish Button - untuk pengesah */}
                           {canPublishSop(file) &&

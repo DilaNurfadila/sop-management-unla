@@ -352,9 +352,10 @@ class SopDoc {
 
       const [result] = await pool.query(
         `UPDATE sop_documents 
-          SET status = 'published', 
+          SET status = 'unpublished', 
+              review_status = 'approved',
               sop_code = ?, 
-              published_at = NOW()
+              approval_date = NOW()
           WHERE id = ?`,
         [sopCode, id]
       );
@@ -414,6 +415,14 @@ class SopDoc {
       throw new Error("Judul SOP wajib diisi");
     }
 
+    // Normalisasi unit_scope: jadikan number atau null (hindari string kosong)
+    const normalizedUnitScope =
+      unit_scope === undefined ||
+      unit_scope === null ||
+      String(unit_scope).trim() === ""
+        ? null
+        : Number(unit_scope);
+
     // Start transaction
     const connection = await pool.getConnection();
     await connection.beginTransaction();
@@ -426,7 +435,7 @@ class SopDoc {
         title,
         goals,
         scope,
-        unit_scope,
+        normalizedUnitScope,
         definition,
         sop_reference,
         procedure_description,
@@ -546,10 +555,12 @@ class SopDoc {
       version_type, // 'minor' atau 'major'
     } = sopData;
 
-    // Cek kode SOP unik
-    const existingDoc = await this.findBySopCode(sop_code, id);
-    if (existingDoc) {
-      throw new Error("Kode SOP sudah digunakan oleh dokumen lain");
+    // Cek kode SOP unik hanya jika sop_code diubah/dikirim
+    if (sop_code !== undefined && sop_code !== null) {
+      const existingDoc = await this.findBySopCode(sop_code, id);
+      if (existingDoc) {
+        throw new Error("Kode SOP sudah digunakan oleh dokumen lain");
+      }
     }
 
     const connection = await pool.getConnection();
@@ -567,6 +578,7 @@ class SopDoc {
       let newVersion = currentDoc[0].version;
       let newStatus = currentDoc[0].status;
       let reviewStatus = null;
+      let revisionType = null;
 
       // Parse versi current
       const versionWithoutPrefix = currentDoc[0].version.replace(/^V\./, "");
@@ -584,6 +596,7 @@ class SopDoc {
         newVersion = `V.${majorVersion}.${minorVersion + 1}`;
         newStatus = "unpublished";
         reviewStatus = "approved"; // reset review status minor
+        revisionType = "minor";
       }
 
       if (version_type === "major") {
@@ -592,31 +605,80 @@ class SopDoc {
             "Major version hanya bisa diterapkan pada SOP yang sudah selesai"
           );
         }
-        // newVersion = `V.${majorVersion + 1}.0`;
+        // Tidak naikkan versi pada saat edit, tandai sebagai major pending
         newStatus = "draft";
         reviewStatus = "major_pending";
+        revisionType = "major";
       }
 
       // Update SOP
-      const updateQuery =
-        "UPDATE sop_documents SET sop_code = ?, version = ?, status = ?, title = ?, goals = ?, scope = ?, unit_scope = ?, definition = ?, sop_reference = ?, procedure_description = ?" +
-        (reviewStatus ? ", review_status = ?" : "") +
-        ", revision_date = NOW() WHERE id = ?";
-      const updateParams = [
-        sop_code,
-        newVersion,
-        newStatus,
-        title,
-        goals,
-        scope,
-        unit_scope,
-        definition,
-        sop_reference,
-        procedure_description,
-        ...(reviewStatus ? [reviewStatus] : []),
-        id,
-      ];
-      await connection.query(updateQuery, updateParams);
+      // Normalisasi unit_scope untuk update (hanya set jika dikirim dan tidak kosong)
+      const hasUnitScopeField = Object.prototype.hasOwnProperty.call(
+        sopData,
+        "unit_scope"
+      );
+      const normalizedUnitScope =
+        hasUnitScopeField &&
+        unit_scope !== null &&
+        String(unit_scope).trim() !== ""
+          ? Number(unit_scope)
+          : null;
+
+      // Build dynamic SET clause agar tidak menimpa kolom jika tidak dikirim
+      const setClauses = [];
+      const params = [];
+
+      if (sop_code !== undefined) {
+        setClauses.push("sop_code = ?");
+        params.push(sop_code);
+      }
+      setClauses.push("version = ?");
+      params.push(newVersion);
+      setClauses.push("status = ?");
+      params.push(newStatus);
+      if (title !== undefined) {
+        setClauses.push("title = ?");
+        params.push(title);
+      }
+      if (goals !== undefined) {
+        setClauses.push("goals = ?");
+        params.push(goals);
+      }
+      if (scope !== undefined) {
+        setClauses.push("scope = ?");
+        params.push(scope);
+      }
+      if (hasUnitScopeField && normalizedUnitScope !== null) {
+        setClauses.push("unit_scope = ?");
+        params.push(normalizedUnitScope);
+      }
+      if (definition !== undefined) {
+        setClauses.push("definition = ?");
+        params.push(definition);
+      }
+      if (sop_reference !== undefined) {
+        setClauses.push("sop_reference = ?");
+        params.push(sop_reference);
+      }
+      if (procedure_description !== undefined) {
+        setClauses.push("procedure_description = ?");
+        params.push(procedure_description);
+      }
+      if (reviewStatus) {
+        setClauses.push("review_status = ?");
+        params.push(reviewStatus);
+      }
+      if (version_type) {
+        setClauses.push("revision_type = ?");
+        params.push(revisionType);
+      }
+      setClauses.push("revision_date = NOW()");
+
+      const updateQuery = `UPDATE sop_documents SET ${setClauses.join(
+        ", "
+      )} WHERE id = ?`;
+      params.push(id);
+      await connection.query(updateQuery, params);
 
       // Update reviewer & approver jika diberikan
       if (reviewer_id || approver_id) {
@@ -680,21 +742,19 @@ class SopDoc {
       let newStatus = STATUS.PUBLISHED; // Default: langsung published
       let newReviewStatus = REVIEW_STATUS.APPROVED;
 
-      // Jika ada major revision pending, naikan versi major dan kembali ke unpublished untuk review
+      // Jika ada major revision pending, kirim ulang ke alur review tanpa menaikkan versi lagi (sudah dinaikkan saat approval)
       if (currentDoc[0].review_status === REVIEW_STATUS.MAJOR_PENDING) {
-        const versionWithoutPrefix = currentDoc[0].version.replace(/^V\./, "");
-        const currentVersionParts = versionWithoutPrefix.split(".");
-        const majorVersion = parseInt(currentVersionParts[0] || 1);
-
-        // Naikan major version, reset minor ke 0
-        newVersion = `V.${majorVersion + 1}.0`;
-
-        // 🔧 PERBAIKAN: Major revision → unpublished untuk review ulang
         newStatus = STATUS.UNPUBLISHED;
         newReviewStatus = REVIEW_STATUS.SUBMITTED_FOR_REVIEW;
+      }
+      // 🔧 PERBAIKAN: Publikasi normal untuk SOP yang sudah approved
+      else if (currentDoc[0].review_status === REVIEW_STATUS.APPROVED) {
+        // Publikasi normal - status menjadi published
+        newStatus = STATUS.PUBLISHED;
+        newReviewStatus = REVIEW_STATUS.APPROVED;
       } else {
         throw new Error(
-          `📉 Normal publish: status → published (no major revision pending)`
+          `❌ SOP belum bisa dipublikasi. Status saat ini: ${currentDoc[0].review_status}. Status harus 'approved' atau 'major_pending'.`
         );
       }
 
@@ -777,7 +837,7 @@ class SopDoc {
             d.title,
             d.goals,
             d.scope,
-            d.unit_scope,
+            COALESCE(d.unit_scope, sca.unit_scope) AS unit_scope,
             unit_scope_tbl.nama_unit AS unit_scope_name,
             d.definition,
             d.sop_reference,
@@ -802,7 +862,8 @@ class SopDoc {
           LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
           LEFT JOIN users creator ON ar.user_id = creator.id
           LEFT JOIN units u ON ar.unit_id = u.id
-          LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+          LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+          LEFT JOIN units unit_scope_tbl ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope_tbl.id
           LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
           LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
           WHERE 1 = 1
@@ -822,7 +883,7 @@ class SopDoc {
             d.title,
             d.goals,
             d.scope,
-            d.unit_scope,
+            COALESCE(d.unit_scope, sca.unit_scope) AS unit_scope,
             unit_scope_tbl.nama_unit AS unit_scope_name,
             d.definition,
             d.sop_reference,
@@ -847,10 +908,11 @@ class SopDoc {
           LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
           LEFT JOIN users creator ON ar.user_id = creator.id
           LEFT JOIN units u ON ar.unit_id = u.id
-          LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+          LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+          LEFT JOIN units unit_scope_tbl ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope_tbl.id
           LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
           LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
-          WHERE d.unit_scope = ?
+          WHERE COALESCE(d.unit_scope, sca.unit_scope) = ?
           ORDER BY d.created_at DESC
         `,
           [userUnit]
@@ -867,7 +929,7 @@ class SopDoc {
           d.title,
           d.goals,
           d.scope,
-          d.unit_scope,
+          COALESCE(d.unit_scope, sca.unit_scope) AS unit_scope,
           unit_scope_tbl.nama_unit AS unit_scope_name,
           d.definition,
           d.sop_reference,
@@ -892,12 +954,13 @@ class SopDoc {
         LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
         LEFT JOIN users creator ON ar.user_id = creator.id
         LEFT JOIN units u ON ar.unit_id = u.id
-        LEFT JOIN units unit_scope_tbl ON d.unit_scope = unit_scope_tbl.id
+        LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+        LEFT JOIN units unit_scope_tbl ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope_tbl.id
         LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
         LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
         WHERE 
           (
-            (d.unit_scope = ? OR d.unit_scope IS NULL) AND d.status = 'published'
+            COALESCE(d.unit_scope, sca.unit_scope) = ? AND d.status = 'published'
           ) OR 
           (
             ar.user_id = ?

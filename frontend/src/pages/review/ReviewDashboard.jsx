@@ -15,24 +15,43 @@ const ReviewDashboard = () => {
   const [pendingReviews, setPendingReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Get user data untuk filter berdasarkan role
   const userData = getSafeUserDataNoRedirect();
   const userRole = userData?.role;
 
-  // Filter reviews berdasarkan role user
+  // Filter reviews berdasarkan role user dan search term
   const filteredReviews = useMemo(() => {
     if (!pendingReviews.length) return [];
 
-    // Jika admin, tampilkan semua (sudah tidak duplikat dari backend)
+    let filtered = [];
+
+    // Filter berdasarkan role user
     if (userRole === "admin" || userRole === "admin_unit") {
-      return pendingReviews;
+      filtered = pendingReviews;
+    } else {
+      // Untuk user biasa, data sudah difilter dari backend berdasarkan user_id dan role
+      filtered = pendingReviews;
     }
 
-    // Untuk user biasa, data sudah difilter dari backend berdasarkan user_id dan role
-    // Tidak perlu filtering tambahan di frontend
-    return pendingReviews;
-  }, [pendingReviews, userRole]);
+    // Filter berdasarkan search term
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (review) =>
+          review.sop_title?.toLowerCase().includes(searchLower) ||
+          review.sop_code?.toLowerCase().includes(searchLower) ||
+          review.status?.toLowerCase().includes(searchLower) ||
+          review.review_status?.toLowerCase().includes(searchLower) ||
+          review.creator_name?.toLowerCase().includes(searchLower) ||
+          review.reviewer_name?.toLowerCase().includes(searchLower) ||
+          review.approver_name?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  }, [pendingReviews, userRole, searchTerm]);
 
   const fetchPendingReviews = useCallback(async () => {
     try {
@@ -50,6 +69,12 @@ const ReviewDashboard = () => {
   useEffect(() => {
     fetchPendingReviews();
   }, [fetchPendingReviews]);
+
+  // Helper: prefer creator's unit name for listing; fallback to unit scope name
+  const formatUnitForList = (unitName, unitScopeName) => {
+    // Show creator's unit if available; otherwise show scope name
+    return unitName || unitScopeName || "";
+  };
 
   const showNotification = (message, type) => {
     setNotification({ message, type });
@@ -150,6 +175,40 @@ const ReviewDashboard = () => {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="bg-white rounded-lg shadow p-6 mb-8">
+        <div className="flex items-center space-x-4">
+          <div className="flex-1">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <FiEye className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Cari berdasarkan judul SOP, kode, status, penyusun, pemeriksa, atau pengesah..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+              <FiX className="h-4 w-4 mr-1" />
+              Clear
+            </button>
+          )}
+        </div>
+        {searchTerm && (
+          <div className="mt-3 text-sm text-gray-600">
+            Menampilkan {filteredReviews.length} dari {pendingReviews.length}{" "}
+            SOP untuk "{searchTerm}"
+          </div>
+        )}
+      </div>
+
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow p-6">
@@ -213,15 +272,26 @@ const ReviewDashboard = () => {
           <div className="p-8 text-center">
             <FiCheck className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">
-              {userRole === "admin" || userRole === "admin_unit"
+              {searchTerm
+                ? "Tidak ada hasil pencarian"
+                : userRole === "admin" || userRole === "admin_unit"
                 ? "Tidak ada review pending"
                 : "Tidak ada SOP yang perlu Anda review"}
             </h3>
             <p className="mt-1 text-sm text-gray-500">
-              {userRole === "admin" || userRole === "admin_unit"
+              {searchTerm
+                ? `Tidak ditemukan SOP yang sesuai dengan "${searchTerm}"`
+                : userRole === "admin" || userRole === "admin_unit"
                 ? "Semua dokumen SOP sudah direview atau belum ada yang diajukan."
                 : "Anda belum ditugaskan untuk mereview SOP atau semua SOP yang ditugaskan sudah direview."}
             </p>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="mt-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Lihat Semua SOP Review
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -281,7 +351,10 @@ const ReviewDashboard = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-gray-900">
-                        {review.unit_scope_name}
+                        {formatUnitForList(
+                          review.unit_name,
+                          review.unit_scope_name
+                        )}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

@@ -12,4 +12,7 @@ router.get("/", authenticate, feedbackController.getAllFeedback);
 router.put("/:id", authenticate, feedbackController.updateFeedback);
 router.delete("/:id", authenticate, feedbackController.deleteFeedback);
 
+// Admin/Admin Unit routes untuk reply feedback
+router.post("/:id/reply", authenticate, feedbackController.replyFeedback);
+
 module.exports = router;

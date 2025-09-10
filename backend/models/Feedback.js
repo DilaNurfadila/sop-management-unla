@@ -71,9 +71,11 @@ class Feedback {
       SELECT 
         f.*,
         s.sop_code,
-        s.title as sop_title
+        s.title as sop_title,
+        u.name as responded_by_name
       FROM sop_feedback f
       LEFT JOIN sop_documents s ON f.sop_id = s.id
+      LEFT JOIN users u ON f.responded_by = u.id
       ORDER BY f.created_at DESC
     `);
     return rows;
@@ -101,6 +103,68 @@ class Feedback {
       [sop_id, user_email]
     );
     return rows.length > 0;
+  }
+
+  /**
+   * Update feedback status (approve/reject) dan response dari admin
+   * @param {number} feedbackId - ID feedback
+   * @param {string} status - Status feedback (pending/approved/rejected)
+   * @param {string} adminResponse - Response dari admin/admin_unit
+   * @param {number} respondedBy - ID user yang merespons
+   * @returns {Promise<Object>} - Updated feedback object
+   */
+  static async updateFeedbackStatus(
+    feedbackId,
+    status,
+    adminResponse,
+    respondedBy
+  ) {
+    try {
+      const [result] = await pool.query(
+        `UPDATE sop_feedback 
+         SET status = ?, admin_response = ?, responded_by = ?, responded_at = NOW(), updated_at = NOW() 
+         WHERE id = ?`,
+        [status, adminResponse, respondedBy, feedbackId]
+      );
+
+      if (result.affectedRows === 0) {
+        throw new Error("Feedback tidak ditemukan");
+      }
+
+      // Get updated feedback data
+      const [updatedFeedback] = await pool.query(
+        `SELECT f.*, u.name as responded_by_name 
+         FROM sop_feedback f 
+         LEFT JOIN users u ON f.responded_by = u.id 
+         WHERE f.id = ?`,
+        [feedbackId]
+      );
+
+      return updatedFeedback[0];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Get feedback by ID with SOP and responder details
+   * @param {number} feedbackId - ID feedback
+   * @returns {Promise<Object>} - Feedback object with details
+   */
+  static async getFeedbackById(feedbackId) {
+    const [rows] = await pool.query(
+      `SELECT 
+        f.*,
+        s.sop_code,
+        s.title as sop_title,
+        u.name as responded_by_name
+      FROM sop_feedback f
+      LEFT JOIN sop_documents s ON f.sop_id = s.id
+      LEFT JOIN users u ON f.responded_by = u.id
+      WHERE f.id = ?`,
+      [feedbackId]
+    );
+    return rows[0];
   }
 }
 

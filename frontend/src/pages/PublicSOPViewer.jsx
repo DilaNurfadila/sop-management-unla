@@ -628,11 +628,9 @@ const PublicSOPViewer = () => {
                           Tanggal Pembuatan:
                         </span>
                         <span className="text-right">
-                          {sopData?.created_at || sopData?.creation_date
-                            ? formatDate(
-                                sopData?.created_at || sopData?.creation_date
-                              )
-                            : "-"}
+                          {sopData?.approval_date
+                            ? formatDate(sopData?.approval_date)
+                            : "Belum disahkan"}
                         </span>
                       </div>
 
@@ -641,9 +639,19 @@ const PublicSOPViewer = () => {
                           Tanggal Revisi:
                         </span>
                         <span className="text-right">
-                          {sopData?.revision_date
+                          {/* Tampilkan tanggal revisi hanya jika benar-benar ada revisi setelah disahkan */}
+                          {sopData?.revision_date &&
+                          sopData?.approval_date &&
+                          (sopData?.status === "published" ||
+                            sopData?.review_status === "approved") &&
+                          new Date(sopData?.revision_date) >
+                            new Date(sopData?.approval_date)
                             ? formatDate(sopData?.revision_date)
-                            : "-"}
+                            : sopData?.approval_date &&
+                              (sopData?.status === "published" ||
+                                sopData?.review_status === "approved")
+                            ? "Belum ada revisi"
+                            : "Tidak ada revisi"}
                         </span>
                       </div>
 
@@ -652,9 +660,16 @@ const PublicSOPViewer = () => {
                           Tanggal Efektif:
                         </span>
                         <span className="text-right">
-                          {formatDate(
-                            sopData?.sop_applicable || sopData?.effective_date
-                          ) || "-"}
+                          {/* Tampilkan tanggal efektif hanya jika SOP sudah disahkan */}
+                          {sopData?.approval_date &&
+                          (sopData?.status === "published" ||
+                            sopData?.status === "unpublished") &&
+                          sopData?.review_status === "approved"
+                            ? formatDate(
+                                sopData?.sop_applicable ||
+                                  sopData?.effective_date
+                              )
+                            : "Belum ditetapkan"}
                         </span>
                       </div>
 

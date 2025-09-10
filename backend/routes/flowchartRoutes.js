@@ -1,6 +1,7 @@
 // flowchartRoutes.js
 const express = require("express");
 const router = express.Router();
+const db = require("../config/db");
 const { authenticate } = require("../middlewares/authMiddleware");
 const {
   getSopActivities,
@@ -58,20 +59,39 @@ router.post("/sop-visualization/bulk", saveBulkVisualizations);
 router.delete("/sop-visualization/clear/:sop_doc_id", async (req, res) => {
   try {
     const { sop_doc_id } = req.params;
-    const [result] = await db.execute(
-      `DELETE FROM sop_visualization WHERE activity_id IN (
-                SELECT id FROM sop_activities WHERE sop_doc_id = ?
-            )`,
+
+    // First, get all activity IDs for this SOP
+    const [activities] = await db.execute(
+      "SELECT id FROM sop_activities WHERE sop_doc_id = ?",
       [sop_doc_id]
     );
+
+    if (activities.length === 0) {
+      return res.json({
+        message: `No activities found for SOP ${sop_doc_id}, nothing to clear.`,
+        deletedCount: 0,
+      });
+    }
+
+    const activityIds = activities.map((activity) => activity.id);
+
+    // Delete visualizations for these activities
+    const placeholders = activityIds.map(() => "?").join(",");
+    const [result] = await db.execute(
+      `DELETE FROM sop_visualization WHERE activity_id IN (${placeholders})`,
+      activityIds
+    );
+
     res.json({
       message: `All visualizations for SOP ${sop_doc_id} have been cleared.`,
       deletedCount: result.affectedRows,
     });
   } catch (error) {
+    console.error("Error clearing visualization data:", error);
     res.status(500).json({
       message: "Error clearing visualization data",
       error: error.message,
+      details: error.stack || "No stack trace available",
     });
   }
 });

@@ -55,13 +55,30 @@ exports.getUsersByAdminUnit = async (req, res) => {
 exports.assignSopCreator = async (req, res) => {
   try {
     // Ambil data dari request body
-    const { assigned_to, notes, due_date, task_type, sop_to_revise } = req.body;
+    const {
+      assigned_to,
+      notes,
+      due_date,
+      task_type,
+      sop_to_revise,
+      reviewer_id,
+      approver_id,
+      unit_scope,
+    } = req.body;
     const assignedBy = req.user.id;
 
     // Validasi input
-    if (!assigned_to || !notes) {
+    if (!assigned_to || !notes || !reviewer_id || !approver_id || !unit_scope) {
       return res.status(400).json({
-        message: "assigned_to and notes are required",
+        message:
+          "assigned_to, notes, reviewer_id, approver_id, and unit_scope are required",
+      });
+    }
+
+    // Validasi bahwa penyusun tidak sama dengan pemeriksa atau pengesah
+    if (assigned_to === reviewer_id || assigned_to === approver_id) {
+      return res.status(400).json({
+        message: "Creator cannot be the same as reviewer or approver",
       });
     }
 
@@ -105,6 +122,22 @@ exports.assignSopCreator = async (req, res) => {
       });
     }
 
+    // Cek apakah reviewer ada
+    const reviewerUser = await User.findById(reviewer_id);
+    if (!reviewerUser) {
+      return res.status(404).json({
+        message: "Reviewer user not found",
+      });
+    }
+
+    // Cek apakah approver ada
+    const approverUser = await User.findById(approver_id);
+    if (!approverUser) {
+      return res.status(404).json({
+        message: "Approver user not found",
+      });
+    }
+
     // Validasi unit hanya untuk admin_unit, admin penuh bisa assign ke siapa saja
     if (req.user.role === "admin_unit") {
       const adminUser = await User.findById(assignedBy);
@@ -130,7 +163,10 @@ exports.assignSopCreator = async (req, res) => {
       "pending",
       processedDueDate,
       taskType,
-      taskType === "revise" ? sop_to_revise : null
+      taskType === "revise" ? sop_to_revise : null,
+      reviewer_id,
+      approver_id,
+      unit_scope
     );
 
     const result = await assignment.save();

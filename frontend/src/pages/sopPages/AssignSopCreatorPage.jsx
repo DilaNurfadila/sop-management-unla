@@ -2,11 +2,14 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   getUsersByAdminUnit,
   assignSopCreator,
-  getApprovedSopsByAdminUnit,
+  getAdminUsers,
+  // getApprovedSopsByAdminUnit, // Dinonaktifkan sementara
 } from "../../services/sopCreatorApi";
-import { getSopDocuments } from "../../services/flowchartApi";
+import { getAllUnits } from "../../services/unitApi";
+// import { getSopDocuments } from "../../services/flowchartApi"; // Dinonaktifkan sementara
 import Notification from "../../components/Notification";
 import { useAdminPermissions } from "../../hooks/useAdminRole";
+import { getSafeUserDataNoRedirect } from "../../utils/cryptoUtils";
 
 const AssignSopCreatorPage = () => {
   // Admin permissions check
@@ -14,6 +17,8 @@ const AssignSopCreatorPage = () => {
 
   // State untuk data
   const [users, setUsers] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]); // Admin users untuk pemeriksa dan pengesah
+  const [units, setUnits] = useState([]); // Units untuk ruang lingkup unit kerja
   // const [sopDocuments, setSopDocuments] = useState([]); // Dinonaktifkan sementara
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -23,6 +28,9 @@ const AssignSopCreatorPage = () => {
     assigned_to: "",
     task_type: "create", // Default ke "create", revisi dinonaktifkan sementara
     sop_to_revise: "", // ID SOP yang akan direvisi (jika task_type = revise)
+    reviewer_id: "", // ID Pemeriksa (wajib)
+    approver_id: "", // ID Pengesah (wajib)
+    unit_scope: "", // ID Unit untuk ruang lingkup unit kerja (wajib)
     notes: "",
     due_date: "",
   });
@@ -51,46 +59,91 @@ const AssignSopCreatorPage = () => {
   }, []);
 
   /**
-   * Mengambil daftar SOP documents yang bisa direvisi
+   * Mengambil daftar admin users untuk pemeriksa dan pengesah
    */
-  const loadSopDocuments = useCallback(async () => {
+  const loadAdminUsers = useCallback(async () => {
     try {
-      // Gunakan endpoint yang sesuai berdasarkan role
-      let response;
-      if (userRole === "admin_unit") {
-        // Admin unit: hanya SOP dari unit mereka yang sudah approved
-        response = await getApprovedSopsByAdminUnit();
-      } else {
-        // Admin: semua SOP yang sudah approved
-        const allSops = await getSopDocuments();
-        const dataArray = Array.isArray(allSops) ? allSops : allSops.data || [];
-        response = dataArray.filter((doc) => doc.review_status === "approved");
-      }
-
-      // Pastikan response adalah array
-      const dataArray = Array.isArray(response)
-        ? response
-        : response.data || [];
-
-      // Filter SOP yang sudah disahkan (review_status = 'approved')
-      let availableSops = dataArray.filter((doc) => {
-        return doc.review_status === "approved";
-      });
-
-      setSopDocuments(availableSops);
+      const response = await getAdminUsers();
+      setAdminUsers(response.data);
     } catch (error) {
-      console.error("❌ Error loading SOP documents:", error);
-      showNotification("Gagal memuat daftar SOP", "error");
+      console.error("❌ Error loading admin users:", error);
+      showNotification("Gagal memuat daftar admin users", "error");
     }
-  }, [userRole]);
+  }, []);
+
+  /**
+   * Mengambil daftar units untuk ruang lingkup unit kerja
+   */
+  const loadUnits = useCallback(async () => {
+    try {
+      const response = await getAllUnits();
+      const unitsArray = response.units || [];
+      setUnits(unitsArray);
+    } catch (error) {
+      console.error("❌ Error loading units:", error);
+      showNotification("Gagal memuat daftar unit kerja", "error");
+    }
+  }, []);
+
+  /**
+   * Mengambil daftar SOP documents yang bisa direvisi
+   * NOTE: Dinonaktifkan sementara karena fitur revisi dimatikan
+   */
+  // const loadSopDocuments = useCallback(async () => {
+  //   try {
+  //     // Gunakan endpoint yang sesuai berdasarkan role
+  //     let response;
+  //     if (userRole === "admin_unit") {
+  //       // Admin unit: hanya SOP dari unit mereka yang sudah approved
+  //       response = await getApprovedSopsByAdminUnit();
+  //     } else {
+  //       // Admin: semua SOP yang sudah approved
+  //       const allSops = await getSopDocuments();
+  //       const dataArray = Array.isArray(allSops) ? allSops : allSops.data || [];
+  //       response = dataArray.filter((doc) => doc.review_status === "approved");
+  //     }
+
+  //     // Pastikan response adalah array
+  //     const dataArray = Array.isArray(response)
+  //       ? response
+  //       : response.data || [];
+
+  //     // Filter SOP yang sudah disahkan (review_status = 'approved')
+  //     let availableSops = dataArray.filter((doc) => {
+  //       return doc.review_status === "approved";
+  //     });
+
+  //     setSopDocuments(availableSops);
+  //   } catch (error) {
+  //     console.error("❌ Error loading SOP documents:", error);
+  //     showNotification("Gagal memuat daftar SOP", "error");
+  //   }
+  // }, [userRole]);
 
   // Load users saat komponen dimount (SOP documents dinonaktifkan sementara)
   useEffect(() => {
     if (canAssignSopCreator) {
       loadUsers();
+      loadAdminUsers();
+      loadUnits();
       // loadSopDocuments(); // Dinonaktifkan sementara karena fitur revisi dimatikan
     }
-  }, [canAssignSopCreator, userRole, loadUsers]);
+  }, [canAssignSopCreator, userRole, loadUsers, loadAdminUsers, loadUnits]);
+
+  // Auto-select unit untuk admin_unit
+  useEffect(() => {
+    if (userRole === "admin_unit") {
+      // Untuk admin_unit, auto-select unit mereka sendiri
+      // Ambil informasi user dari utilitas crypto
+      const userData = getSafeUserDataNoRedirect();
+      if (userData && userData.unit) {
+        setFormData((prev) => ({
+          ...prev,
+          unit_scope: userData.unit.toString(),
+        }));
+      }
+    }
+  }, [userRole]);
 
   /**
    * Handle perubahan input form
@@ -113,8 +166,27 @@ const AssignSopCreatorPage = () => {
     e.preventDefault();
 
     // Validasi form
-    if (!formData.assigned_to || !formData.notes || !formData.task_type) {
+    if (
+      !formData.assigned_to ||
+      !formData.notes ||
+      !formData.task_type ||
+      !formData.reviewer_id ||
+      !formData.approver_id ||
+      !formData.unit_scope
+    ) {
       showNotification("Harap lengkapi semua field yang wajib diisi", "error");
+      return;
+    }
+
+    // Validasi penyusun tidak boleh sama dengan pemeriksa atau pengesah
+    if (
+      formData.assigned_to === formData.reviewer_id ||
+      formData.assigned_to === formData.approver_id
+    ) {
+      showNotification(
+        "Penyusun tidak boleh sama dengan Pemeriksa atau Pengesah",
+        "error"
+      );
       return;
     }
 
@@ -128,13 +200,18 @@ const AssignSopCreatorPage = () => {
       setSubmitting(true);
 
       // Kirim data penugasan
-      const response = await assignSopCreator(formData);
+      await assignSopCreator(formData);
+
+      // Tampilkan notifikasi success
+      showNotification("Penugasan berhasil dibuat!", "success");
 
       // Reset form
       setFormData({
         assigned_to: "",
-        task_type: "",
+        task_type: "create", // Reset ke default
         sop_to_revise: "",
+        reviewer_id: "",
+        approver_id: "",
         notes: "",
         due_date: "",
       });
@@ -285,12 +362,12 @@ const AssignSopCreatorPage = () => {
                   </div>
                 )}
 
-                {/* Pilih Pengguna */}
+                {/* Pilih Penyusun */}
                 <div>
                   <label
                     htmlFor="assigned_to"
                     className="block text-sm font-medium text-gray-700 mb-2">
-                    Pilih Pengguna <span className="text-red-500">*</span>
+                    Penyusun <span className="text-red-500">*</span>
                   </label>
                   <select
                     id="assigned_to"
@@ -299,7 +376,7 @@ const AssignSopCreatorPage = () => {
                     onChange={handleInputChange}
                     required
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">-- Pilih Pengguna --</option>
+                    <option value="">-- Pilih Penyusun --</option>
                     {users.map((user) => (
                       <option key={user.id} value={user.id}>
                         {userRole === "admin"
@@ -311,9 +388,138 @@ const AssignSopCreatorPage = () => {
                     ))}
                   </select>
                   <p className="mt-1 text-sm text-gray-500">
-                    {userRole === "admin"
-                      ? `Total ${users.length} pengguna dari semua unit`
-                      : `Total ${users.length} pengguna dalam unit Anda`}
+                    Pilih pengguna yang akan menyusun SOP
+                  </p>
+                </div>
+
+                {/* Ruang Lingkup Unit Kerja */}
+                <div>
+                  <label
+                    htmlFor="unit_scope"
+                    className="block text-sm font-medium text-gray-700 mb-2">
+                    Ruang Lingkup Unit Kerja{" "}
+                    <span className="text-red-500">*</span>
+                    {userRole === "admin_unit" && (
+                      <span className="text-sm text-blue-600 font-normal ml-2">
+                        (Otomatis dipilih sesuai unit Anda)
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    id="unit_scope"
+                    name="unit_scope"
+                    value={formData.unit_scope}
+                    onChange={handleInputChange}
+                    disabled={userRole === "admin_unit"}
+                    required
+                    className={`block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                      userRole === "admin_unit"
+                        ? "bg-gray-100 cursor-not-allowed"
+                        : ""
+                    }`}>
+                    <option value="">
+                      {userRole === "admin_unit"
+                        ? "Unit kerja telah ditentukan"
+                        : "-- Pilih Unit Kerja --"}
+                    </option>
+                    {Array.isArray(units) &&
+                      units.map((unit) => (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.nama_unit}
+                          {userRole === "admin_unit" &&
+                            unit.id == formData.unit_scope &&
+                            " (Unit Anda)"}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {userRole === "admin_unit"
+                      ? "SOP akan dibuat untuk unit kerja Anda"
+                      : "Pilih unit kerja yang akan menjadi ruang lingkup SOP ini"}
+                  </p>
+                </div>
+
+                {/* Pilih Pemeriksa */}
+                <div>
+                  <label
+                    htmlFor="reviewer_id"
+                    className="block text-sm font-medium text-gray-700 mb-2">
+                    Pemeriksa <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="reviewer_id"
+                    name="reviewer_id"
+                    value={formData.reviewer_id}
+                    onChange={handleInputChange}
+                    required
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">-- Pilih Pemeriksa --</option>
+                    {/* User biasa */}
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {userRole === "admin"
+                          ? `${user.name} (User - ${
+                              user.unit_name || user.unit || "Tidak ada unit"
+                            })`
+                          : user.name}
+                      </option>
+                    ))}
+                    {/* Admin users */}
+                    {adminUsers.map((user) => (
+                      <option key={`admin-${user.id}`} value={user.id}>
+                        {userRole === "admin"
+                          ? `${user.name} (${
+                              user.role === "admin" ? "Admin" : "Admin Unit"
+                            } - ${user.unit_name || "Tidak ada unit"})`
+                          : user.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Pilih pengguna yang akan memeriksa SOP ({users.length} user
+                    + {adminUsers.length} admin tersedia)
+                  </p>
+                </div>
+
+                {/* Pilih Pengesah */}
+                <div>
+                  <label
+                    htmlFor="approver_id"
+                    className="block text-sm font-medium text-gray-700 mb-2">
+                    Pengesah <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="approver_id"
+                    name="approver_id"
+                    value={formData.approver_id}
+                    onChange={handleInputChange}
+                    required
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">-- Pilih Pengesah --</option>
+                    {/* User biasa */}
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {userRole === "admin"
+                          ? `${user.name} (User - ${
+                              user.unit_name || user.unit || "Tidak ada unit"
+                            })`
+                          : user.name}
+                      </option>
+                    ))}
+                    {/* Admin users */}
+                    {adminUsers.map((user) => (
+                      <option key={`admin-${user.id}`} value={user.id}>
+                        {userRole === "admin"
+                          ? `${user.name} (${
+                              user.role === "admin" ? "Admin" : "Admin Unit"
+                            } - ${user.unit_name || "Tidak ada unit"})`
+                          : user.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Pilih pengguna yang akan mengesahkan SOP ({users.length}{" "}
+                    user + {adminUsers.length} admin tersedia)
                   </p>
                 </div>
 

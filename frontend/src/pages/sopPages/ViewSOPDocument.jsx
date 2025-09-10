@@ -102,7 +102,6 @@ const ViewSOPDocument = () => {
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [showRevisionHistory, setShowRevisionHistory] = useState(false);
   // const [revisionHistory, setRevisionHistory] = useState([]); // DINONAKTIFKAN SEMENTARA
-  const [latestApprovedRevision, setLatestApprovedRevision] = useState(null);
 
   const roleColors = useMemo(
     () => [
@@ -161,8 +160,7 @@ const ViewSOPDocument = () => {
     try {
       // Set empty defaults
       // setRevisionHistory([]); // DINONAKTIFKAN SEMENTARA
-      setLatestApprovedRevision(null);
-
+      // no-op
       /*
       const history = await revisionRequestApi.getRevisionRequestHistory(id);
 
@@ -179,16 +177,16 @@ const ViewSOPDocument = () => {
         const latestApproved = approvedRevisions.sort(
           (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
         )[0];
-        setLatestApprovedRevision(latestApproved);
+  // no-op
       } else {
-        setLatestApprovedRevision(null);
+  // no-op
       }
       */
     } catch (error) {
       console.error("Error fetching revision history:", error);
       // Set empty array on error
       // setRevisionHistory([]); // DINONAKTIFKAN SEMENTARA
-      setLatestApprovedRevision(null);
+      // no-op
     }
   }, [id]);
 
@@ -206,12 +204,19 @@ const ViewSOPDocument = () => {
         let contentResponse;
         try {
           contentResponse = await getPublishedSopContent(id);
-        } catch {
+        } catch (publicError) {
+          console.log(
+            "Public endpoint failed, trying authenticated endpoint...",
+            publicError.message
+          );
           // Jika gagal dengan public endpoint, coba dengan authenticated endpoint
           try {
             contentResponse = await getSopContent(id);
           } catch (authError) {
-            throw new Error("Tidak dapat mengakses konten SOP", authError);
+            console.error("Both endpoints failed:", { publicError, authError });
+            throw new Error(
+              "Tidak dapat mengakses konten SOP. Pastikan Anda memiliki akses ke dokumen ini."
+            );
           }
         }
 
@@ -220,11 +225,11 @@ const ViewSOPDocument = () => {
           getColsApi(id),
           getSopsApi(id),
         ]);
-        
+
         // Validasi contentResponse sebelum mengakses data
         if (contentResponse && contentResponse.data) {
           setSopData(contentResponse.data);
-          setLatestApprovedRevision(contentResponse.data?.revision_date);
+          // revision_date now read directly from sopData
         } else {
           throw new Error("Data SOP tidak ditemukan atau tidak valid");
         }
@@ -676,7 +681,18 @@ const ViewSOPDocument = () => {
                         UNIVERSITAS LANGLANGBUANA
                       </h1>
                       <h1 className="text-xl font-semibold mt-3">
-                        {sopData?.unit_name || "Unit Kerja Tidak Diketahui"}
+                        {/* Tampilkan nama unit hanya jika ruang lingkup BUKAN Universitas */}
+                        {(() => {
+                          const name = (sopData?.unit_scope_name || "")
+                            .toLowerCase()
+                            .trim();
+                          const isUniversity =
+                            name === "universitas langlangbuana" ||
+                            sopData?.unit_scope === 1;
+                          if (isUniversity) return "";
+                          // Hanya tampilkan unit_scope_name; jangan fallback ke unit_name pengguna
+                          return sopData?.unit_scope_name || "";
+                        })()}
                       </h1>
                     </div>
                   </div>
@@ -705,11 +721,8 @@ const ViewSOPDocument = () => {
                           Tanggal Pembuatan:
                         </span>
                         <span className="text-right">
-                          {/* Tampilkan tanggal pembuatan jika ada created_at atau creation_date */}
-                          {sopData?.created_at || sopData?.creation_date
-                            ? dateFormatter(
-                                sopData?.created_at || sopData?.creation_date
-                              )
+                          {sopData?.approval_date
+                            ? dateFormatter(sopData?.approval_date) || "-"
                             : "-"}
                         </span>
                       </div>
@@ -719,9 +732,9 @@ const ViewSOPDocument = () => {
                           Tanggal Revisi:
                         </span>
                         <span className=" text-right">
-                          {latestApprovedRevision
-                            ? dateFormatter(latestApprovedRevision)
-                            : "-"}
+                          {sopData?.revision_date
+                            ? dateFormatter(sopData.revision_date)
+                            : "Belum ada revisi"}
                         </span>
                       </div>
 
@@ -730,9 +743,16 @@ const ViewSOPDocument = () => {
                           Tanggal Efektif:
                         </span>
                         <span className=" text-right">
-                          {dateFormatter(
-                            sopData?.effective_date || sopData?.published_at
-                          ) || "-"}
+                          {/* Tampilkan tanggal efektif hanya jika SOP sudah disahkan */}
+                          {sopData?.approval_date &&
+                          (sopData?.status === "published" ||
+                            sopData?.status === "unpublished") &&
+                          sopData?.review_status === "approved"
+                            ? dateFormatter(
+                                sopData?.effective_date ||
+                                  sopData?.sop_applicable
+                              )
+                            : "Belum ditetapkan"}
                         </span>
                       </div>
 

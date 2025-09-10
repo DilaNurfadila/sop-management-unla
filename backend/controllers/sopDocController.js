@@ -149,11 +149,16 @@ exports.getPublishedSopContent = async (req, res) => {
       });
     }
 
-    // Pastikan dokumen sudah published
-    if (doc.status !== "published") {
+    // Pastikan dokumen sudah disahkan dan bisa diakses publik
+    // SOP bisa diakses jika: published ATAU (unpublished + approved)
+    const isAccessible =
+      doc.status === "published" ||
+      (doc.status === "unpublished" && doc.review_status === "approved");
+
+    if (!isAccessible) {
       return res.status(403).json({
         success: false,
-        message: "SOP document is not published",
+        message: "SOP document is not published or approved",
       });
     }
 
@@ -163,6 +168,7 @@ exports.getPublishedSopContent = async (req, res) => {
       sop_code: doc.sop_code,
       sop_title: doc.title,
       version: doc.version,
+      revision_type: doc.revision_type,
       goals: doc.goals,
       scope: doc.scope,
       definition: doc.definition,
@@ -175,6 +181,7 @@ exports.getPublishedSopContent = async (req, res) => {
       creation_date: doc.creation_date,
       effective_date: doc.effective_date,
       revision_date: doc.revision_date,
+      approval_date: doc.approval_date,
       creator_name: doc.uploader_name,
       unit_name: doc.unit_name,
       reviewer_name: doc.reviewer_name,
@@ -524,7 +531,7 @@ exports.deleteDoc = async (req, res) => {
       });
     }
 
-    // TIDAK HAPUS FILE dari Firebase Storage - file tetap ada
+    // Catatan: saat ini tidak ada penghapusan file dari storage eksternal
     // TIDAK PERLU UPDATE STATUS karena data sudah dipindah ke arsip
 
     // Log aktivitas pemindahan ke arsip (bukan penghapusan permanen)
@@ -808,6 +815,8 @@ exports.getSopContent = async (req, res) => {
       revision_date: doc.revision_date, // Tanggal revisi (null jika tidak ada)
       creator_name: doc.uploader_name, // Gunakan field yang benar dari query
       unit_name: doc.unit_name,
+      // Tambahkan nama ruang lingkup unit yang ditentukan saat penugasan
+      unit_scope_name: doc.unit_scope_name,
       reviewer_name: doc.reviewer_name,
       approver_name: doc.approver_name,
       approver_position: doc.approver_position,
@@ -857,13 +866,25 @@ exports.validateBeforeSubmit = async (req, res) => {
     const missingFields = [];
     let isValid = true;
 
+    // Siapkan fallback dari assignment untuk reviewer/approver/unit_scope
+    const pool = require("../config/db");
+    let assignment = null;
+    if (sop.assignment_id) {
+      const [assignRows] = await pool.query(
+        `SELECT reviewer_id, approver_id, unit_scope FROM sop_creator_assignments WHERE id = ?`,
+        [sop.assignment_id]
+      );
+      assignment = assignRows[0] || null;
+    }
+
     // Validasi field wajib SOP
     if (!sop.title || sop.title.trim() === "") {
       missingFields.push("Judul SOP");
       isValid = false;
     }
 
-    if (!sop.unit_scope) {
+    const effectiveUnitScope = sop.unit_scope || assignment?.unit_scope;
+    if (!effectiveUnitScope) {
       missingFields.push("Ruang Lingkup Unit Kerja");
       isValid = false;
     }
@@ -878,15 +899,7 @@ exports.validateBeforeSubmit = async (req, res) => {
       isValid = false;
     }
 
-    if (!sop.definition || sop.definition.trim() === "") {
-      missingFields.push("Definisi");
-      isValid = false;
-    }
-
-    if (!sop.sop_reference || sop.sop_reference.trim() === "") {
-      missingFields.push("Referensi");
-      isValid = false;
-    }
+    // Definisi dan Referensi tidak wajib untuk pengajuan
 
     if (!sop.procedure_description || sop.procedure_description.trim() === "") {
       missingFields.push("Deskripsi Prosedur");
@@ -894,18 +907,20 @@ exports.validateBeforeSubmit = async (req, res) => {
     }
 
     // Validasi pemeriksa dan pengesah
-    if (!sop.reviewer_id) {
+    const effectiveReviewerId = sop.reviewer_id || assignment?.reviewer_id;
+    if (!effectiveReviewerId) {
       missingFields.push("Pemeriksa");
       isValid = false;
     }
 
-    if (!sop.approver_id) {
+    const effectiveApproverId = sop.approver_id || assignment?.approver_id;
+    if (!effectiveApproverId) {
       missingFields.push("Pengesah");
       isValid = false;
     }
 
     // Validasi visualisasi flowchart - cek sop_activities dan sop_visualization
-    const pool = require("../config/db");
+    // pool sudah di-import di atas
 
     // 1. Cek apakah ada activities
     const [activities] = await pool.query(
@@ -964,8 +979,6 @@ exports.validateBeforeSubmit = async (req, res) => {
       "Ruang Lingkup Unit Kerja",
       "Tujuan",
       "Ruang Lingkup",
-      "Definisi",
-      "Referensi",
       "Deskripsi Prosedur",
       "Pemeriksa",
       "Pengesah",

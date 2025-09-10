@@ -27,7 +27,8 @@ const safeEncrypt = (data) => {
     }).toString();
 
     return iv.toString(cryptojs.enc.Hex) + ":" + encrypted;
-  } catch (error) {return null;
+  } catch (error) {
+    return null;
   }
 };
 
@@ -68,7 +69,8 @@ const logUserActivity = async (
       targetData?.id || null,
       targetData ? "user" : null
     );
-  } catch (error) {// Tidak throw error agar tidak mengganggu flow utama
+  } catch (error) {
+    // Tidak throw error agar tidak mengganggu flow utama
   }
 };
 
@@ -130,38 +132,6 @@ exports.getUserByEmail = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
-// Other exports (createDoc, updateDoc, etc.) remain the same
-// exports.createDoc = async (req, res) => {
-//   try {
-//     const newDoc = await SopDoc.createSopDoc(req.body);
-//     res
-//       .status(201)
-//       .json({ message: "SOP document created successfully", newDoc });
-//   } catch (error) {
-//     res.status(400).json({ message: error.message });
-//   }
-// };
-
-// exports.updateDoc = async (req, res) => {
-//   try {
-//     const updatedDoc = await SopDoc.updateSopDoc(req.params.id, req.body);
-//     res
-//       .status(200)
-//       .json({ message: "SOP document updated successfully", updatedDoc });
-//   } catch (error) {
-//     res.status(400).json({ message: error.message });
-//   }
-// };
-
-// exports.deleteDoc = async (req, res) => {
-//   try {
-//     await SopDoc.delete(req.params.id);
-//     res.status(200).json({ message: "SOP document deleted successfully" });
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
 
 /**
  * Update user profile
@@ -235,7 +205,8 @@ exports.updateUserProfile = async (req, res) => {
         unit: encryptedData.unit,
       },
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       message: "Terjadi kesalahan saat memperbarui profil",
     });
   }
@@ -302,7 +273,8 @@ exports.changePassword = async (req, res) => {
     res.status(200).json({
       message: "Password berhasil diubah",
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       message: "Terjadi kesalahan saat mengubah password",
     });
   }
@@ -316,7 +288,8 @@ exports.changePassword = async (req, res) => {
 exports.getAllUsersForAdmin = async (req, res) => {
   try {
     // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {return res.status(403).json({
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
         success: false,
         message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
       });
@@ -340,7 +313,8 @@ exports.getAllUsersForAdmin = async (req, res) => {
       success: true,
       users: safeUsers,
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mengambil data pengguna",
     });
@@ -353,7 +327,8 @@ exports.getAllUsersForAdmin = async (req, res) => {
 exports.getUserStats = async (req, res) => {
   try {
     // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {return res.status(403).json({
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
         success: false,
         message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
       });
@@ -377,7 +352,8 @@ exports.getUserStats = async (req, res) => {
       success: true,
       stats: stats,
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mengambil statistik pengguna",
     });
@@ -441,7 +417,8 @@ exports.deleteUserByAdmin = async (req, res) => {
       success: true,
       message: "Pengguna berhasil dihapus",
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal menghapus pengguna",
     });
@@ -517,7 +494,8 @@ exports.updateUserRole = async (req, res) => {
       success: true,
       message: "Role pengguna berhasil diubah",
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mengubah role pengguna",
     });
@@ -564,9 +542,59 @@ exports.searchUsers = async (req, res) => {
       success: true,
       users: safeUsers,
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mencari pengguna",
+    });
+  }
+};
+
+/**
+ * Function untuk mendapatkan daftar admin users untuk reviewer/approver assignment
+ */
+exports.getAdminUsers = async (req, res) => {
+  try {
+    const currentUserRole = req.user.role;
+    const currentUserUnit = req.user.unit;
+
+    let users;
+
+    if (currentUserRole === "admin") {
+      // Admin penuh dapat memilih admin_unit dan admin dari semua unit
+      users = await User.findUsersByRole(["admin", "admin_unit"]);
+    } else if (currentUserRole === "admin_unit") {
+      // Admin unit hanya dapat memilih admin_unit dari unit yang sama
+      const allAdminUnits = await User.findUsersByRole(["admin_unit"]);
+      users = allAdminUnits.filter((user) => user.unit === currentUserUnit);
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
+      });
+    }
+
+    // Return data user tanpa password dengan informasi unit
+    const safeUsers = users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      position: user.position || "",
+      unit: user.unit || "",
+      unit_name: user.unit_name || "",
+      role: user.role,
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: safeUsers,
+      message: `Found ${safeUsers.length} admin users`,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching admin users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengambil data admin users",
     });
   }
 };

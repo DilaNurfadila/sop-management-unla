@@ -26,36 +26,11 @@ router.get(
   authorize(["admin", "admin_unit", "user"]),
   archiveController.getArchiveStats
 );
-// router.get(
-//   "/sop/:sopId",
-//   authenticate,
-//   authorize(["admin", "admin_unit"]),
-//   archiveController.getArchivedVersions
-// );
-// router.get(
-//   "/:id",
-//   authenticate,
-//   authorize(["admin", "admin_unit"]),
-//   archiveController.getArchivedById
-// );
-// router.get(
-//   "/:id/download",
-//   authenticate,
-//   authorize(["admin", "admin_unit"]),
-//   archiveController.downloadArchivedFile
-// );
 router.post(
   "/:id/restore",
   authenticate,
   authorize(["admin", "admin_unit"]),
   archiveController.restoreSopFromArchive
 );
-// Komentar: Fungsi ini belum diimplementasikan
-// router.delete(
-//   "/:id",
-//   authenticate,
-//   authorize(["admin", "admin_unit"]),
-//   archiveController.deleteArchived
-// );
 
 module.exports = router;

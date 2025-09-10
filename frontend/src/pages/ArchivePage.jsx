@@ -16,9 +16,7 @@ import CustomModal from "../components/CustomModal";
 import { useModal } from "../hooks/useModal";
 import {
   getAllArchived,
-  downloadArchivedFile,
   restoreDocument,
-  deleteArchived,
   getArchiveStats,
 } from "../services/archiveApi.jsx";
 import { formatDateTime } from "../utils/dateFormatter";
@@ -36,12 +34,12 @@ const ArchivePage = () => {
   const userData = getSafeUserDataNoRedirect();
   const isAdmin = userData?.role === "admin";
   const isAdminUnit = userData?.role === "admin_unit";
-  const canManageArchives = isAdmin || isAdminUnit;
+  // Perubahan kebijakan: hanya admin_unit yang dapat mengelola (restore/delete) arsip
+  const canManageArchives = isAdminUnit;
 
   // Initialize modal hook
   const {
     modalState,
-    showDeleteConfirm,
     showRestoreConfirm,
     showAlert,
     closeModal,
@@ -88,15 +86,6 @@ const ArchivePage = () => {
     }
   };
 
-  const handleDownload = async (archiveId, fileName) => {
-    try {
-      await downloadArchivedFile(archiveId, fileName);
-    } catch (err) {
-      setError("Gagal mengunduh file");
-      console.error("Error downloading file:", err);
-    }
-  };
-
   const handleRestore = async (archiveId) => {
     await showRestoreConfirm({
       title: "Konfirmasi Restore Dokumen",
@@ -129,49 +118,24 @@ const ArchivePage = () => {
     });
   };
 
-  const handleDelete = async (archiveId) => {
-    await showDeleteConfirm({
-      title: "Konfirmasi Hapus Permanen",
-      message:
-        "Apakah Anda yakin ingin menghapus dokumen arsip ini secara permanen? Tindakan ini tidak dapat dibatalkan.",
-      onConfirm: async () => {
-        try {
-          setModalLoading(true);
-          await deleteArchived(archiveId);
-          await fetchArchivedDocs();
-          await fetchStats();
-
-          showAlert({
-            title: "Berhasil",
-            message: "Dokumen arsip berhasil dihapus permanen",
-            type: "success",
-          });
-        } catch (err) {
-          setError("Gagal menghapus dokumen arsip");
-          console.error("Error deleting archived document:", err);
-          showAlert({
-            title: "Error",
-            message: "Gagal menghapus dokumen arsip. Silakan coba lagi.",
-            type: "danger",
-          });
-        } finally {
-          setModalLoading(false);
-        }
-      },
-    });
-  };
+  // Catatan: fitur hapus arsip dinonaktifkan sementara karena endpoint belum tersedia
 
   const filteredDocs = archivedDocs.filter((doc) => {
-    const matchesSearch = doc.title
+    const matchesSearch = (doc.title || "")
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
+    // Category support non-mandatory; tolerate missing field
     const matchesCategory =
       !selectedCategory || doc.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   const categories = [
-    ...new Set(archivedDocs.map((doc) => doc.category).filter(Boolean)),
+    ...new Set(
+      (archivedDocs || [])
+        .map((doc) => doc.category)
+        .filter((c) => typeof c === "string" && c.length > 0)
+    ),
   ];
 
   if (loading) {
@@ -193,18 +157,20 @@ const ArchivePage = () => {
           </h1>
         </div>
         <p className="text-gray-600">
-          Kelola dokumen SOP yang telah diarsipkan. Anda dapat melihat,
-          mengunduh, atau mengembalikan versi lama.
+          Kelola dokumen SOP yang telah diarsipkan. Anda dapat melihat atau
+          mengembalikan versi lama.
         </p>
       </div>
 
       {/* Statistics Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-md p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Arsip</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Total Arsip{!isAdmin && " (Unit Anda)"}
+                </p>
                 <p className="text-2xl font-bold text-blue-600">
                   {stats.total_archived}
                 </p>
@@ -217,7 +183,7 @@ const ArchivePage = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Dokumen Aktif
+                  Dokumen Aktif{!isAdmin && " (Unit Anda)"}
                 </p>
                 <p className="text-2xl font-bold text-green-600">
                   {stats.total_active || 0}
@@ -231,29 +197,13 @@ const ArchivePage = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Dokumen dengan Arsip
+                  Dokumen dengan Arsip{!isAdmin && " (Unit Anda)"}
                 </p>
                 <p className="text-2xl font-bold text-orange-600">
                   {stats.documents_with_archives}
                 </p>
               </div>
               <FiFolder className="text-3xl text-orange-100" />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Ukuran Rata-rata
-                </p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {stats.avg_file_size
-                    ? `${(stats.avg_file_size / 1024 / 1024).toFixed(1)} MB`
-                    : "0 MB"}
-                </p>
-              </div>
-              <FiDownload className="text-3xl text-purple-100" />
             </div>
           </div>
         </div>
@@ -343,8 +293,7 @@ const ArchivePage = () => {
                             {doc.title}
                           </div>
                           <div className="text-sm text-gray-500">
-                            Versi: {doc.version || "N/A"} •{" "}
-                            {doc.category || "Tanpa Kategori"}
+                            Versi: {doc.version || "N/A"}
                           </div>
                         </div>
                       </div>
@@ -377,14 +326,7 @@ const ArchivePage = () => {
 
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleDownload(doc.id, doc.file_name)}
-                          className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50"
-                          title="Unduh File">
-                          <FiDownload />
-                        </button>
-
-                        {/* Tombol Restore - hanya untuk admin dan admin_unit */}
+                        {/* Tombol Restore - hanya untuk admin_unit */}
                         {canManageArchives && (
                           <button
                             onClick={() => handleRestore(doc.id)}
@@ -394,15 +336,7 @@ const ArchivePage = () => {
                           </button>
                         )}
 
-                        {/* Tombol Delete - hanya untuk admin dan admin_unit */}
-                        {canManageArchives && (
-                          <button
-                            onClick={() => handleDelete(doc.id)}
-                            className="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50"
-                            title="Hapus Permanen">
-                            <FiTrash2 />
-                          </button>
-                        )}
+                        {/* Tombol Delete di-nonaktifkan karena endpoint belum tersedia */}
                       </div>
                     </td>
                   </tr>
@@ -412,32 +346,6 @@ const ArchivePage = () => {
           </div>
         )}
       </div>
-
-      {/* Recent Archives */}
-      {stats?.recent_archives && stats.recent_archives.length > 0 && (
-        <div className="mt-8 bg-white rounded-xl shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Arsip Terbaru
-          </h2>
-          <div className="space-y-3">
-            {stats.recent_archives.map((archive, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
-                <div>
-                  <p className="font-medium text-gray-900">{archive.title}</p>
-                  <p className="text-sm text-gray-500">
-                    oleh {archive.archived_by_name}
-                  </p>
-                </div>
-                <span className="text-sm text-gray-400">
-                  {formatDateTime(archive.archived_at)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Custom Modal */}
       <CustomModal

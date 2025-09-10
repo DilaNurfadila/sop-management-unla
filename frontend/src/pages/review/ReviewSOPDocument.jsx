@@ -9,6 +9,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import mermaid from "mermaid";
 import QRCode from "qrcode";
 import { getSopContent } from "../../services/apiPdf";
+import { getSafeUserDataNoRedirect } from "../../utils/cryptoUtils.jsx";
 import {
   getItems as getItemsApi,
   getCols as getColsApi,
@@ -110,11 +111,20 @@ const ReviewSOPDocument = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showApproveAllModal, setShowApproveAllModal] = useState(false);
+  const [showReviewerApproveModal, setShowReviewerApproveModal] =
+    useState(false);
   const [rejectData, setRejectData] = useState({ note: "" });
   const [approveData, setApproveData] = useState({
     note: "",
     effective_date: new Date().toISOString().split("T")[0], // Default to today
   });
+  const [approveAllData, setApproveAllData] = useState({
+    note: "",
+    effective_date: new Date().toISOString().split("T")[0],
+  });
+  const [reviewerApproveData, setReviewerApproveData] = useState({ note: "" });
+  const currentUser = useMemo(() => getSafeUserDataNoRedirect(), []);
 
   const roleColors = useMemo(
     () => [
@@ -196,16 +206,22 @@ const ReviewSOPDocument = () => {
 
         // Merge the data
         const mergedSopData = {
+          // Prefer content data as the source of truth for display fields
           ...sopContentData,
+          // Overlay reviewData but avoid clobbering unit scope/name if reviewData lacks it
           ...reviewData,
-          // Use review data for these fields if available
-          review_status: reviewData.review_status,
-          user_role: reviewData.user_role,
+          // Explicit field priorities
+          review_status:
+            reviewData.review_status ?? sopContentData.review_status,
+          user_role: reviewData.user_role ?? sopContentData.user_role,
+          creator_name: reviewData.creator_name || sopContentData.creator_name,
           reviewer_name:
             reviewData.reviewer_name || sopContentData.reviewer_name,
           approver_name:
             reviewData.approver_name || sopContentData.approver_name,
-          creator_name: reviewData.creator_name || sopContentData.creator_name,
+          unit_scope_name:
+            reviewData.unit_scope_name || sopContentData.unit_scope_name,
+          unit_name: reviewData.unit_name || sopContentData.unit_name,
         };
 
         setSopData(mergedSopData);
@@ -295,32 +311,100 @@ const ReviewSOPDocument = () => {
     );
   };
 
+  const isSameReviewerAndApprover = useMemo(() => {
+    if (!sopData) return false;
+    return (
+      sopData.reviewer_id &&
+      sopData.approver_id &&
+      sopData.reviewer_id === sopData.approver_id
+    );
+  }, [sopData]);
+
+  const canUseCombinedApprove = useMemo(() => {
+    if (!sopData || !currentUser) return false;
+    if (!isSameReviewerAndApprover) return false;
+    // Pastikan user saat ini adalah user yang ditetapkan sebagai reviewer/approver
+    const sameUser = String(currentUser.id) === String(sopData.reviewer_id);
+    // Hanya tampil saat status di salah satu tahap persetujuan
+    const inFlow =
+      sopData.review_status === "submitted_for_review" ||
+      sopData.review_status === "reviewer_approved";
+    return sameUser && inFlow;
+  }, [sopData, currentUser, isSameReviewerAndApprover]);
+
   const handleApprove = async () => {
     // Jika user adalah Approver, tampilkan modal untuk set tanggal efektif
     if (sopData.user_role === "Approver") {
       setShowApproveModal(true);
       return;
     }
+    // Untuk Reviewer, tampilkan modal input catatan
+    setShowReviewerApproveModal(true);
+  };
 
-    // Untuk Reviewer, langsung approve
-    if (!window.confirm("Apakah Anda yakin menyetujui dokumen SOP ini?")) {
+  const handleConfirmReviewerApprove = async () => {
+    try {
+      setActionLoading(true);
+      await api.post(`/review/approve/${id}`, {
+        note: reviewerApproveData.note,
+      });
+      showNotification("SOP berhasil disetujui", "success");
+      setShowReviewerApproveModal(false);
+      setTimeout(() => {
+        navigate("/review");
+      }, 1500);
+    } catch (error) {
+      console.error("Error approving SOP (Reviewer):", error);
+      showNotification(
+        error.response?.data?.message || "Error menyetujui SOP",
+        "error"
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApproveAll = async () => {
+    setShowApproveAllModal(true);
+  };
+
+  const handleConfirmApproveAll = async () => {
+    if (!approveAllData.effective_date) {
+      showNotification("Tanggal efektif harus diisi", "error");
+      return;
+    }
+    const today = new Date().toISOString().split("T")[0];
+    if (approveAllData.effective_date < today) {
+      showNotification("Tanggal efektif tidak boleh di masa lalu", "error");
       return;
     }
 
     try {
       setActionLoading(true);
-      const note = prompt("Catatan persetujuan (opsional):");
 
-      await api.post(`/review/approve/${id}`, { note });
-      showNotification("SOP berhasil disetujui", "success");
+      // Jika masih tahap reviewer, setujui dulu sebagai Reviewer
+      if (sopData.review_status === "submitted_for_review") {
+        await api.post(`/review/approve/${id}`, {
+          note: approveAllData.note,
+          act_as: "Reviewer",
+        });
+      }
 
-      setTimeout(() => {
-        navigate("/review");
-      }, 2000);
+      // Lanjutkan pengesahan sebagai Approver dengan tanggal efektif
+      await api.post(`/review/approve/${id}`, {
+        note: approveAllData.note,
+        effective_date: approveAllData.effective_date,
+        act_as: "Approver",
+      });
+
+      showNotification("SOP disetujui dan disahkan", "success");
+      setShowApproveAllModal(false);
+      setTimeout(() => navigate("/review"), 1500);
     } catch (error) {
-      console.error("Error approving SOP:", error);
+      console.error("Error in combined approve flow:", error);
       showNotification(
-        error.response?.data?.message || "Error menyetujui SOP",
+        error.response?.data?.message ||
+          "Terjadi kesalahan saat menyetujui dan mengesahkan SOP",
         "error"
       );
     } finally {
@@ -757,8 +841,18 @@ const ReviewSOPDocument = () => {
             {/* Review Action Buttons */}
             {canApprove() && (
               <div className="flex gap-2">
-                {/* Tombol Tolak hanya untuk Reviewer, bukan Approver */}
-                {sopData?.user_role !== "Approver" && (
+                {/* Jika reviewer & approver user-nya sama, tampilkan tombol gabungan */}
+                {canUseCombinedApprove && (
+                  <button
+                    onClick={handleApproveAll}
+                    disabled={actionLoading}
+                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-300 transition-colors">
+                    <FiCheck className="w-4 h-4 mr-2" />
+                    {actionLoading ? "Memproses..." : "Setujui & Sahkan"}
+                  </button>
+                )}
+                {/* Tombol Tolak hanya untuk tahap reviewer */}
+                {sopData?.review_status === "submitted_for_review" && (
                   <button
                     onClick={() => setShowRejectModal(true)}
                     disabled={actionLoading}
@@ -767,17 +861,19 @@ const ReviewSOPDocument = () => {
                     {actionLoading ? "Memproses..." : "Tolak"}
                   </button>
                 )}
-                <button
-                  onClick={handleApprove}
-                  disabled={actionLoading}
-                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 transition-colors">
-                  <FiCheck className="w-4 h-4 mr-2" />
-                  {actionLoading
-                    ? "Memproses..."
-                    : sopData?.user_role === "Approver"
-                    ? "Sahkan SOP"
-                    : "Setujui"}
-                </button>
+                {!canUseCombinedApprove && (
+                  <button
+                    onClick={handleApprove}
+                    disabled={actionLoading}
+                    className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 transition-colors">
+                    <FiCheck className="w-4 h-4 mr-2" />
+                    {actionLoading
+                      ? "Memproses..."
+                      : sopData?.user_role === "Approver"
+                      ? "Sahkan SOP"
+                      : "Setujui"}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -821,7 +917,24 @@ const ReviewSOPDocument = () => {
                         UNIVERSITAS LANGLANGBUANA
                       </h1>
                       <h1 className="text-xl font-semibold mt-3">
-                        {sopData?.unit_name || "Unit Kerja Tidak Diketahui"}
+                        {(() => {
+                          const name =
+                            sopData?.unit_scope_name ||
+                            sopData?.unit_name ||
+                            "";
+                          const normalized = name
+                            .toString()
+                            .trim()
+                            .toLowerCase()
+                            .replace(/\./g, "")
+                            .replace(/\s+/g, " ");
+                          const isUniversity =
+                            normalized.includes("universitas") &&
+                            normalized.includes("langlangbuana");
+                          return isUniversity
+                            ? ""
+                            : name || "Unit Kerja Tidak Diketahui";
+                        })()}
                       </h1>
                     </div>
                   </div>
@@ -850,8 +963,7 @@ const ReviewSOPDocument = () => {
                           Tanggal Pembuatan:
                         </span>
                         <span className="text-right">
-                          {sopData?.status === "Published" ||
-                          sopData?.approval_date
+                          {sopData?.approval_date
                             ? dateFormatter(sopData?.approval_date) || "-"
                             : "-"}
                         </span>
@@ -862,9 +974,10 @@ const ReviewSOPDocument = () => {
                           Tanggal Revisi:
                         </span>
                         <span className=" text-right">
+                          {/* Tampilkan tanggal revisi jika ada dan setelah tanggal pengesahan */}
                           {sopData?.revision_date
                             ? dateFormatter(sopData.revision_date)
-                            : "-"}
+                            : "Belum ada revisi"}
                         </span>
                       </div>
 
@@ -873,9 +986,16 @@ const ReviewSOPDocument = () => {
                           Tanggal Efektif:
                         </span>
                         <span className=" text-right">
-                          {dateFormatter(
-                            sopData?.effective_date || sopData?.published_at
-                          ) || "-"}
+                          {/* Tampilkan tanggal efektif hanya jika SOP sudah disahkan */}
+                          {sopData?.approval_date &&
+                          (sopData?.status === "published" ||
+                            sopData?.status === "unpublished") &&
+                          sopData?.review_status === "approved"
+                            ? dateFormatter(
+                                sopData?.effective_date ||
+                                  sopData?.sop_applicable
+                              )
+                            : "Belum ditetapkan"}
                         </span>
                       </div>
 
@@ -1264,6 +1384,139 @@ const ReviewSOPDocument = () => {
                   disabled={actionLoading || !approveData.effective_date}
                   className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-medium py-2 px-4 rounded-md transition-colors">
                   {actionLoading ? "Memproses..." : "Sahkan SOP"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Combined Approve & Approve Modal for same user as Reviewer+Approver */}
+      {showApproveAllModal && (
+        <div
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowApproveAllModal(false);
+            }
+          }}>
+          <div
+            className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="mt-3">
+              <FiCheck className="mx-auto h-12 w-12 text-indigo-600" />
+              <h3 className="text-lg font-medium text-gray-900 mt-2 text-center">
+                Setujui & Sahkan SOP
+              </h3>
+              <p className="text-sm text-gray-600 text-center mt-1">
+                Anda bertindak sebagai Reviewer dan Approver. Isi tanggal
+                efektif untuk pengesahan.
+              </p>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tanggal Efektif <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={approveAllData.effective_date}
+                    onChange={(e) =>
+                      setApproveAllData((prev) => ({
+                        ...prev,
+                        effective_date: e.target.value,
+                      }))
+                    }
+                    min={new Date().toISOString().split("T")[0]}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Tanggal mulai berlakunya SOP (tidak boleh di masa lalu)
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Catatan
+                  </label>
+                  <textarea
+                    value={approveAllData.note}
+                    onChange={(e) =>
+                      setApproveAllData((prev) => ({
+                        ...prev,
+                        note: e.target.value,
+                      }))
+                    }
+                    rows="3"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Catatan (opsional)..."
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowApproveAllModal(false)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded-md transition-colors">
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmApproveAll}
+                  disabled={actionLoading || !approveAllData.effective_date}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                  {actionLoading ? "Memproses..." : "Setujui & Sahkan"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reviewer Approve Modal (note only) */}
+      {showReviewerApproveModal && (
+        <div
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowReviewerApproveModal(false);
+            }
+          }}>
+          <div
+            className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="mt-3">
+              <FiCheck className="mx-auto h-12 w-12 text-blue-600" />
+              <h3 className="text-lg font-medium text-gray-900 mt-2 text-center">
+                Setujui Dokumen (Reviewer)
+              </h3>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Catatan Persetujuan (opsional)
+                  </label>
+                  <textarea
+                    value={reviewerApproveData.note}
+                    onChange={(e) =>
+                      setReviewerApproveData({ note: e.target.value })
+                    }
+                    rows="3"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Tulis catatan (opsional)..."
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowReviewerApproveModal(false)}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded-md transition-colors">
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmReviewerApprove}
+                  disabled={actionLoading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                  {actionLoading ? "Memproses..." : "Setujui"}
                 </button>
               </div>
             </div>

@@ -15,6 +15,9 @@ class SopCreatorAssignment {
    * @param {Date} dueDate - Tanggal deadline (opsional)
    * @param {string} taskType - Jenis tugas: 'create' atau 'revise'
    * @param {number} sopToRevise - ID SOP yang akan direvisi (jika task_type = revise)
+   * @param {number} reviewerId - ID user yang akan memeriksa SOP
+   * @param {number} approverId - ID user yang akan mengesahkan SOP
+   * @param {number} unitScope - ID unit untuk ruang lingkup unit kerja SOP
    */
   constructor(
     assignedBy,
@@ -23,7 +26,10 @@ class SopCreatorAssignment {
     status = "pending",
     dueDate = null,
     taskType = "create",
-    sopToRevise = null
+    sopToRevise = null,
+    reviewerId = null,
+    approverId = null,
+    unitScope = null
   ) {
     this.assigned_by = assignedBy;
     this.assigned_to = assignedTo;
@@ -32,6 +38,9 @@ class SopCreatorAssignment {
     this.due_date = dueDate;
     this.task_type = taskType;
     this.sop_to_revise = sopToRevise;
+    this.reviewer_id = reviewerId;
+    this.approver_id = approverId;
+    this.unit_scope = unitScope;
   }
 
   /**
@@ -41,14 +50,17 @@ class SopCreatorAssignment {
   async save() {
     const [result] = await pool.query(
       `INSERT INTO sop_creator_assignments 
-       (assigned_by, assigned_to, notes, task_type, sop_to_revise, status, due_date, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (assigned_by, assigned_to, notes, task_type, sop_to_revise, reviewer_id, approver_id, unit_scope, status, due_date, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         this.assigned_by,
         this.assigned_to,
         this.notes,
         this.task_type,
         this.sop_to_revise,
+        this.reviewer_id,
+        this.approver_id,
+        this.unit_scope,
         this.status,
         this.due_date,
       ]
@@ -68,10 +80,14 @@ class SopCreatorAssignment {
         assignee.name AS assignee_name,
         assignee.email AS assignee_email,
         assignee.position AS assignee_position,
+        reviewer.name AS reviewer_name,
+        approver.name AS approver_name,
         u.nama_unit AS unit_name
       FROM sop_creator_assignments sca
       LEFT JOIN users assigner ON sca.assigned_by = assigner.id
       LEFT JOIN users assignee ON sca.assigned_to = assignee.id
+      LEFT JOIN users reviewer ON sca.reviewer_id = reviewer.id
+      LEFT JOIN users approver ON sca.approver_id = approver.id
       LEFT JOIN units u ON assignee.unit = u.id
       ORDER BY sca.created_at DESC
     `);
@@ -89,10 +105,16 @@ class SopCreatorAssignment {
       SELECT 
         sca.*,
         assigner.name AS assigner_name,
+        assigner.role AS assigner_role,
+        assigner.unit AS assigner_unit_id,
+        assigner_unit.nama_unit AS assigner_unit_name,
         assignee.name AS assignee_name,
         assignee.email AS assignee_email,
         assignee.position AS assignee_position,
+        reviewer.name AS reviewer_name,
+        approver.name AS approver_name,
         u.nama_unit AS unit_name,
+        unit_scope_info.nama_unit AS unit_scope_name,
         sd.id AS sop_document_id,
         sd.review_status AS sop_review_status,
         sd.sop_code AS sop_code,
@@ -101,7 +123,11 @@ class SopCreatorAssignment {
       FROM sop_creator_assignments sca
       LEFT JOIN users assigner ON sca.assigned_by = assigner.id
       LEFT JOIN users assignee ON sca.assigned_to = assignee.id
+      LEFT JOIN users reviewer ON sca.reviewer_id = reviewer.id
+      LEFT JOIN users approver ON sca.approver_id = approver.id
       LEFT JOIN units u ON assignee.unit = u.id
+      LEFT JOIN units assigner_unit ON assigner.unit = assigner_unit.id
+      LEFT JOIN units unit_scope_info ON sca.unit_scope = unit_scope_info.id
       LEFT JOIN sop_documents sd ON sd.assignment_id = sca.id
       WHERE sca.assigned_by = ?
       ORDER BY sca.created_at DESC
@@ -122,10 +148,14 @@ class SopCreatorAssignment {
       SELECT 
         sca.*,
         assigner.name AS assigner_name,
+        assigner.role AS assigner_role,
+        assigner.unit AS assigner_unit_id,
+        assigner_unit.nama_unit AS assigner_unit_name,
         assignee.name AS assignee_name,
         assignee.email AS assignee_email,
         assignee.position AS assignee_position,
         u.nama_unit AS unit_name,
+        unit_scope_info.nama_unit AS unit_scope_name,
         sd.id AS sop_document_id,
         sd.review_status AS sop_review_status,
         sd.sop_code AS sop_code,
@@ -139,6 +169,8 @@ class SopCreatorAssignment {
       LEFT JOIN users assigner ON sca.assigned_by = assigner.id
       LEFT JOIN users assignee ON sca.assigned_to = assignee.id
       LEFT JOIN units u ON assignee.unit = u.id
+      LEFT JOIN units assigner_unit ON assigner.unit = assigner_unit.id
+      LEFT JOIN units unit_scope_info ON sca.unit_scope = unit_scope_info.id
       LEFT JOIN sop_documents sd ON sd.assignment_id = sca.id
       LEFT JOIN sop_documents target_sop ON sca.sop_to_revise = target_sop.id
       WHERE sca.assigned_to = ?

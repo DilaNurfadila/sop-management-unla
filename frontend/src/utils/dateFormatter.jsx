@@ -1,5 +1,5 @@
 // Import function format dan parseISO dari date-fns untuk formatting tanggal
-import { format, parseISO } from "date-fns";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 // Import locale Indonesia untuk formatting dalam bahasa Indonesia
 import { id } from "date-fns/locale";
 
@@ -57,5 +57,27 @@ export const formatDateTime = (dateString) => {
     // Log error dan return string original jika parsing gagal
     console.error("Error formatting date:", error);
     return dateString; // Return original if error
+  }
+};
+
+/**
+ * Format ISO date string ke format relative time (e.g., "2 jam yang lalu")
+ * Mengubah format ISO date menjadi format waktu relatif dalam bahasa Indonesia
+ * @param {string} dateString - String tanggal ISO (e.g., "2025-05-24T17:00:00.000Z")
+ * @returns {string} Waktu relatif yang diformat (e.g., "2 jam yang lalu")
+ */
+export const formatRelativeTime = (dateString) => {
+  // Validasi input
+  if (!dateString) return "";
+  try {
+    // Parse ISO string dan format ke relative time dengan locale Indonesia
+    return formatDistanceToNow(parseISO(dateString), {
+      addSuffix: true,
+      locale: id,
+    });
+  } catch (error) {
+    // Log error dan return formatted date jika parsing gagal
+    console.error("Error formatting relative time:", error);
+    return formatDateTime(dateString); // Fallback to normal date format
   }
 };

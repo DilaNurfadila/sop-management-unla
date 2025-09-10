@@ -16,8 +16,8 @@ exports.getPendingReviews = async (req, res) => {
     let query;
     let params;
 
-    if (userRole === "admin" || userRole === "admin_unit") {
-      // Admin hanya bisa lihat SOP dimana mereka punya role sebagai Reviewer/Approver
+    if (userRole === "admin") {
+      // Admin: bisa bertindak sebagai Reviewer/Approver tanpa harus ditugaskan
       query = `
         SELECT DISTINCT
           d.id,
@@ -28,22 +28,51 @@ exports.getPendingReviews = async (req, res) => {
           d.updated_at,
           creator.name as creator_name,
           unit_scope.nama_unit as unit_scope_name,
-          user_role.role as my_role
+          creator_unit.nama_unit as unit_name,
+          CASE 
+            WHEN d.review_status = 'submitted_for_review' THEN 'Reviewer'
+            WHEN d.review_status = 'reviewer_approved' THEN 'Approver'
+            ELSE NULL
+          END as my_role
         FROM sop_documents d
-        JOIN sop_approval_roles user_role ON d.id = user_role.sop_doc_id AND user_role.user_id = ?
         LEFT JOIN sop_approval_roles creator_role ON d.id = creator_role.sop_doc_id AND creator_role.role = 'Creator'
         LEFT JOIN users creator ON creator_role.user_id = creator.id
-        LEFT JOIN units unit_scope ON d.unit_scope = unit_scope.id
-        WHERE user_role.role IN ('Reviewer', 'Approver')
-          AND (
-            -- Admin sebagai Reviewer hanya lihat SOP yang submitted_for_review
-            (user_role.role = 'Reviewer' AND d.review_status = 'submitted_for_review') OR
-            -- Admin sebagai Approver hanya lihat SOP yang reviewer_approved
-            (user_role.role = 'Approver' AND d.review_status = 'reviewer_approved')
-          )
+        LEFT JOIN units creator_unit ON creator.unit = creator_unit.id
+        LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+        LEFT JOIN units unit_scope ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope.id
+        WHERE d.review_status IN ('submitted_for_review','reviewer_approved')
         ORDER BY d.updated_at DESC
       `;
-      params = [userId];
+      params = [];
+    } else if (userRole === "admin_unit") {
+      // Admin unit: hanya untuk lingkup unitnya, tanpa harus ditugaskan
+      query = `
+        SELECT DISTINCT
+          d.id,
+          d.sop_code,
+          d.title,
+          d.review_status,
+          d.created_at,
+          d.updated_at,
+          creator.name as creator_name,
+          unit_scope.nama_unit as unit_scope_name,
+          creator_unit.nama_unit as unit_name,
+          CASE 
+            WHEN d.review_status = 'submitted_for_review' THEN 'Reviewer'
+            WHEN d.review_status = 'reviewer_approved' THEN 'Approver'
+            ELSE NULL
+          END as my_role
+        FROM sop_documents d
+        LEFT JOIN sop_approval_roles creator_role ON d.id = creator_role.sop_doc_id AND creator_role.role = 'Creator'
+        LEFT JOIN users creator ON creator_role.user_id = creator.id
+        LEFT JOIN units creator_unit ON creator.unit = creator_unit.id
+        LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+        LEFT JOIN units unit_scope ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope.id
+        WHERE COALESCE(d.unit_scope, sca.unit_scope) = ?
+          AND d.review_status IN ('submitted_for_review','reviewer_approved')
+        ORDER BY d.updated_at DESC
+      `;
+      params = [req.user.unit];
     } else {
       // User biasa lihat SOP yang perlu dia review berdasarkan role
       query = `
@@ -56,12 +85,16 @@ exports.getPendingReviews = async (req, res) => {
           d.updated_at,
           creator.name as creator_name,
           unit_scope.nama_unit as unit_scope_name,
+          creator_unit.nama_unit as unit_name,
           ar.role as my_role
         FROM sop_documents d
         JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id 
         LEFT JOIN sop_approval_roles creator_role ON d.id = creator_role.sop_doc_id AND creator_role.role = 'Creator'
-        LEFT JOIN users creator ON creator_role.user_id = creator.id
-        LEFT JOIN units unit_scope ON d.unit_scope = unit_scope.id
+  LEFT JOIN users creator ON creator_role.user_id = creator.id
+  LEFT JOIN units creator_unit ON creator.unit = creator_unit.id
+  -- Gunakan unit_scope dari dokumen jika ada, jika tidak pakai dari penugasan penyusun (via assignment)
+  LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+        LEFT JOIN units unit_scope ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope.id
         WHERE ar.user_id = ? 
           AND ar.role IN ('Reviewer', 'Approver')
           AND (
@@ -104,14 +137,18 @@ exports.getSopForReview = async (req, res) => {
       `
       SELECT 
         d.*,
-        unit_scope.nama_unit as unit_scope_name,
+        -- Gunakan unit_scope dari dokumen jika ada, jika tidak pakai dari penugasan penyusun
+          unit_scope.nama_unit as unit_scope_name,
+          creator_unit.nama_unit as unit_name,
         creator.name as creator_name,
         reviewer.name as reviewer_name,
         approver.name as approver_name
       FROM sop_documents d
-      LEFT JOIN units unit_scope ON d.unit_scope = unit_scope.id
+  LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+      LEFT JOIN units unit_scope ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope.id
       LEFT JOIN sop_approval_roles creator_role ON d.id = creator_role.sop_doc_id AND creator_role.role = 'Creator'
       LEFT JOIN users creator ON creator_role.user_id = creator.id
+  LEFT JOIN units creator_unit ON creator.unit = creator_unit.id
       LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
       LEFT JOIN users reviewer ON reviewer_role.user_id = reviewer.id
       LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
@@ -197,9 +234,13 @@ exports.approveSop = async (req, res) => {
       // Get current SOP status and user role
       const [sopRows] = await connection.query(
         `
-        SELECT d.id, d.sop_code, d.version, d.title, d.review_status, d.created_at, d.updated_at, d.unit_scope, d.revision_type, ar.role as user_role
+        SELECT 
+          d.id, d.sop_code, d.version, d.title, d.review_status, d.created_at, d.updated_at,
+          d.unit_scope, d.revision_type, ar.role as user_role,
+          COALESCE(d.unit_scope, sca.unit_scope) AS effective_unit_scope
         FROM sop_documents d
         LEFT JOIN sop_approval_roles ar ON d.id = ar.sop_doc_id AND ar.user_id = ?
+        LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
         WHERE d.id = ?
       `,
         [userId, id]
@@ -209,9 +250,38 @@ exports.approveSop = async (req, res) => {
         throw new Error("SOP not found or you don't have permission");
       }
 
+      // If user has multiple roles (Reviewer & Approver), determine role to act as
+      const roles = sopRows
+        .map((r) => r.user_role)
+        .filter((r) => r === "Reviewer" || r === "Approver");
+
       const sop = sopRows[0];
-      const userRole = sop.user_role;
-      const revision_type = sop.revision_type;
+      let userRole = sop.user_role;
+      if (roles.length > 1) {
+        // Prefer explicit role provided by client
+        const requestedRole = req.body?.act_as;
+        if (requestedRole && roles.includes(requestedRole)) {
+          userRole = requestedRole;
+        } else {
+          // Infer based on current review status
+          if (sop.review_status === "submitted_for_review") {
+            userRole = "Reviewer";
+          } else if (sop.review_status === "reviewer_approved") {
+            userRole = "Approver";
+          }
+        }
+      } else if (
+        !userRole &&
+        (req.user.role === "admin" || req.user.role === "admin_unit")
+      ) {
+        // Izinkan admin/admin_unit bertindak sesuai status SOP saat ini
+        if (sop.review_status === "submitted_for_review") {
+          userRole = "Reviewer";
+        } else if (sop.review_status === "reviewer_approved") {
+          userRole = "Approver";
+        }
+      }
+      // revision_type is no longer used here; versioning handled elsewhere
 
       let newStatus;
       let nextStep;
@@ -231,43 +301,111 @@ exports.approveSop = async (req, res) => {
 
         // Validasi effective_date untuk Approver
         if (!effective_date) {
-          throw new Error("Tanggal efektif harus diisi untuk pengesahan SOP");
+          const err = new Error(
+            "Tanggal efektif harus diisi untuk pengesahan SOP"
+          );
+          err.httpStatus = 400;
+          throw err;
         }
 
         // Validasi tanggal efektif tidak boleh di masa lalu
         const today = new Date().toISOString().split("T")[0];
         if (effective_date < today) {
-          throw new Error("Tanggal efektif tidak boleh di masa lalu");
+          const err = new Error("Tanggal efektif tidak boleh di masa lalu");
+          err.httpStatus = 400;
+          throw err;
         }
 
-        // Validasi unit_scope
-        if (!sop.unit_scope) {
-          throw new Error("Unit scope tidak ditemukan pada SOP ini");
+        // Validasi unit_scope (gunakan fallback dari assignment)
+        const effectiveUnitScope = sop.effective_unit_scope;
+        if (!effectiveUnitScope) {
+          const err = new Error("Unit scope tidak ditemukan pada SOP ini");
+          err.httpStatus = 400;
+          throw err;
         }
 
-        // Generate kode SOP ketika disetujui oleh Approver
-        const sopCode = await generateSopCode(
-          sop.unit_scope,
-          new Date(effective_date)
+        // Pastikan unit_scope pada dokumen terisi untuk konsistensi data
+        await connection.query(
+          "UPDATE sop_documents SET unit_scope = ? WHERE id = ? AND unit_scope IS NULL",
+          [effectiveUnitScope, id]
         );
 
-        let newVersion = sop.version;
+        // Jika ini revisi MAJOR (ditandai oleh revision_type = 'major'), naikan versi MAJOR sekarang
+        if (sop.revision_type === "major") {
+          try {
+            const verStr = (sop.version || "").replace(/^V\./, "");
+            const [majStr] = verStr.split(".");
+            const maj = parseInt(majStr || "1", 10);
+            const bumped = `V.${isNaN(maj) ? 1 : maj + 1}.0`;
+            await connection.query(
+              "UPDATE sop_documents SET version = ?, revision_type = NULL WHERE id = ?",
+              [bumped, id]
+            );
+          } catch (e) {
+            const err = new Error(
+              "Gagal menaikkan versi major saat pengesahan"
+            );
+            err.httpStatus = 400;
+            throw err;
+          }
+        }
 
-        const versionWithoutPrefix = sop.version.replace(/^V\./, "");
-        const currentVersionParts = versionWithoutPrefix.split(".");
-        const majorVersion = parseInt(currentVersionParts[0] || 1);
+        // Generate sop_code HANYA sekali (saat pertama kali disahkan). Jika sudah ada, jangan diubah.
+        if (!sop.sop_code) {
+          let sopCode;
+          try {
+            sopCode = await generateSopCode(
+              effectiveUnitScope,
+              new Date(effective_date)
+            );
+          } catch (genErr) {
+            const msg =
+              genErr.message ||
+              "Gagal membuat Kode SOP. Cek Unit Scope dan tanggal efektif.";
+            const err = new Error(msg);
+            err.httpStatus = 400;
+            throw err;
+          }
 
-        if (revision_type === "major") {
-          newVersion = `V.${majorVersion + 1}.0`;
-          await connection.query(
-            "UPDATE sop_documents SET version = ?, sop_code = ?, sop_applicable = ?, revision_date = NOW() WHERE id = ?",
-            [newVersion, sopCode, effective_date, id]
-          );
+          // Set sop_code pertama kali dengan retry jika duplicate
+          let updated = false;
+          let attempt = 0;
+          let currentCode = sopCode;
+          while (!updated && attempt < 3) {
+            try {
+              await connection.query(
+                "UPDATE sop_documents SET sop_code = ?, sop_applicable = ? WHERE id = ?",
+                [currentCode, effective_date, id]
+              );
+              updated = true;
+            } catch (e) {
+              if (e && (e.code === "ER_DUP_ENTRY" || e.errno === 1062)) {
+                attempt += 1;
+                const parts = currentCode.split("/");
+                const last = parts.pop();
+                const next = String((parseInt(last, 10) || 0) + 1).padStart(
+                  2,
+                  "0"
+                );
+                parts.push(next);
+                currentCode = parts.join("/");
+              } else {
+                throw e;
+              }
+            }
+          }
+          if (!updated) {
+            const err = new Error(
+              "Gagal menetapkan Kode SOP unik setelah beberapa percobaan"
+            );
+            err.httpStatus = 409;
+            throw err;
+          }
         } else {
-          // Update SOP dengan tanggal efektif dan kode SOP
+          // Sudah punya sop_code: hanya update tanggal efektif
           await connection.query(
-            "UPDATE sop_documents SET sop_code = ?, sop_applicable = ? WHERE id = ?",
-            [sopCode, effective_date, id]
+            "UPDATE sop_documents SET sop_applicable = ? WHERE id = ?",
+            [effective_date, id]
           );
         }
 
@@ -281,14 +419,27 @@ exports.approveSop = async (req, res) => {
           await SopCreatorAssignment.markAsCompleted(sopDoc[0].assignment_id);
         }
       } else {
-        throw new Error("Invalid approval workflow state");
+        const err = new Error(
+          `Alur persetujuan tidak valid untuk status saat ini: ${sop.review_status}`
+        );
+        err.httpStatus = 400;
+        throw err;
       }
 
-      // Update review status (tanpa update updated_at)
-      await connection.query(
-        "UPDATE sop_documents SET review_status = ? WHERE id = ?",
-        [newStatus, id]
-      );
+      // Update review status dan status SOP ketika approved
+      if (newStatus === "approved") {
+        // Ketika SOP disahkan, ubah status dari draft ke unpublished dan set approval_date
+        await connection.query(
+          "UPDATE sop_documents SET review_status = ?, status = 'unpublished', approval_date = NOW() WHERE id = ?",
+          [newStatus, id]
+        );
+      } else {
+        // Update review status saja untuk step lainnya
+        await connection.query(
+          "UPDATE sop_documents SET review_status = ? WHERE id = ?",
+          [newStatus, id]
+        );
+      }
 
       // Update approval date for this role
       await connection.query(
@@ -363,10 +514,10 @@ exports.approveSop = async (req, res) => {
       connection.release();
     }
   } catch (error) {
-    res.status(500).json({
+    const status = error.httpStatus || 500;
+    res.status(status).json({
       success: false,
-      message: "Error approving SOP",
-      error: error.message,
+      message: error.message || "Error approving SOP",
     });
   }
 };

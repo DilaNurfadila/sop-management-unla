@@ -32,22 +32,22 @@ async function generateSopCode(unitId, effectiveDate = new Date()) {
     const month = String(effectiveDate.getMonth() + 1).padStart(2, "0");
     const year = effectiveDate.getFullYear();
 
-    // Cari nomor urut SOP untuk unit dan periode yang sama
+    // Cari suffix terbesar yang sudah terpakai untuk pola dan periode yang sama (tanpa batasan status)
+    const likePattern = `SOP-${unitNumber}/${unitCode}/${month}/${year}/%`;
     const [sopRows] = await pool.query(
       `
-      SELECT COUNT(*) as count 
+      SELECT 
+        MAX(CAST(SUBSTRING_INDEX(sd.sop_code, '/', -1) AS UNSIGNED)) AS max_suffix
       FROM sop_documents sd
-      JOIN units u ON sd.unit_scope = u.id
       WHERE sd.unit_scope = ? 
         AND sd.sop_code IS NOT NULL
         AND sd.sop_code LIKE ?
-        AND sd.review_status = 'approved'
     `,
-      [unitId, `SOP-${unitNumber}/${unitCode}/${month}/${year}/%`]
+      [unitId, likePattern]
     );
 
-    const currentCount = sopRows[0].count;
-    const nextNumber = String(currentCount + 1).padStart(2, "0");
+    const maxSuffix = sopRows[0]?.max_suffix || 0;
+    const nextNumber = String(Number(maxSuffix) + 1).padStart(2, "0");
 
     // Generate kode SOP
     const sopCode = `SOP-${unitNumber}/${unitCode}/${month}/${year}/${nextNumber}`;

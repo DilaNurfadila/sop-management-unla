@@ -1,32 +1,10 @@
 // Import Express untuk membuat router
 const express = require("express");
 const router = express.Router();
-// Import multer untuk handling file uploads
-const multer = require("multer");
 // Import controller untuk dokumen SOP
 const sopDocController = require("../controllers/sopDocController");
 // Import middleware authentication dan authorization
 const { authenticate, authorize } = require("../middlewares/authMiddleware");
-
-/**
- * Konfigurasi multer untuk upload file
- * Menggunakan memory storage untuk file yang di-upload
- */
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // Limit ukuran file 10MB
-  },
-  fileFilter: (req, file, cb) => {
-    // Filter file - hanya PDF yang diizinkan
-    if (file.mimetype === "application/pdf") {
-      cb(null, true); // Accept file
-    } else {
-      cb(new Error("Only PDF files are allowed"), false); // Reject file
-    }
-  },
-});
 
 /**
  * Route Definitions untuk operasi dokumen SOP

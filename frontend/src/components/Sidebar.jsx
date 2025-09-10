@@ -41,9 +41,11 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
       <div className="p-4 flex items-center justify-between">
         {/* Conditional rendering judul berdasarkan state sidebar */}
         {sidebarOpen ? (
-          <h1 className="text-xl font-bold">MyDashboard</h1>
+          <h1 className="text-xl font-bold text-center">
+            Universitas Langlangbuana
+          </h1>
         ) : (
-          <h1 className="text-xl font-bold">MD</h1>
+          <h1 className="text-xl font-bold">UNLA</h1>
         )}
         {/* Tombol toggle sidebar expand/collapse */}
         <button
@@ -136,21 +138,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             <FiActivity size={20} />
             {/* Text label hanya tampil saat sidebar expanded */}
             {sidebarOpen && <span className="ml-3">Riwayat Aktivitas</span>}
-          </Link>
-        )}
-
-        {/* Menu Kelola Permintaan Revisi - Hanya untuk Admin */}
-        {userData?.role === "admin" && (
-          <Link
-            to="/revision-requests"
-            className={`flex items-center w-full p-3 my-1 ${
-              currentPage === "revision-requests" ? "bg-blue-700" : ""
-            } rounded-lg transition-colors`}>
-            <FiEdit size={20} />
-            {/* Text label hanya tampil saat sidebar expanded */}
-            {sidebarOpen && (
-              <span className="ml-3">Kelola Permintaan Revisi</span>
-            )}
           </Link>
         )}
 

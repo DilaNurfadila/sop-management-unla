@@ -49,70 +49,6 @@ export const viewDocPdf = async (docId) => {
 };
 
 /**
- * Function untuk download dokumen SOP dengan logging aktivitas yang akurat
- * Menggunakan detection pattern browser download untuk menentukan kapan user benar-benar mengunduh
- * @param {number} docId - ID dokumen SOP
- * @returns {Promise<void>} - Promise yang resolve setelah download dimulai
- * @throws {Error} - Error jika request gagal
- */
-export const downloadDocPdf = async (docId) => {
-  try {
-    // Cek apakah user sedang authenticated dengan mencoba akses endpoint
-    try {
-      await api.get(`/${docId}`); // Test authentication
-    } catch {
-      throw new Error("Authentication required. Please login first.");
-    }
-
-    // Download file menggunakan axios dengan blob response type
-    const response = await api.get(`/download/${docId}`, {
-      responseType: "blob",
-    });
-
-    // Buat blob URL untuk download
-    const blob = new Blob([response.data], {
-      type: response.headers["content-type"] || "application/pdf",
-    });
-    const url = window.URL.createObjectURL(blob);
-
-    // Extract filename dari Content-Disposition header
-    let filename = `document_${docId}.pdf`;
-    const contentDisposition = response.headers["content-disposition"];
-    if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(
-        /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
-      );
-      if (filenameMatch && filenameMatch[1]) {
-        filename = filenameMatch[1].replace(/['"]/g, "");
-      }
-    }
-
-    // Buat link download
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.style.display = "none";
-
-    // Trigger download
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    // Cleanup blob URL
-    window.URL.revokeObjectURL(url);
-
-    return { success: true, message: "Download started successfully" };
-  } catch (error) {
-    console.error("Error downloading document:", error);
-    throw new Error(
-      error.response?.data?.message ||
-        error.message ||
-        "Failed to download document"
-    );
-  }
-};
-
-/**
  * Function untuk mengambil hanya dokumen yang sudah dipublikasi (untuk tampilan publik)
  * @returns {Promise<Array>} - Array berisi dokumen dengan status 'published'
  * @throws {Error} - Error jika request gagal
@@ -162,34 +98,7 @@ export const getDocPdf = async (id) => {
  * @returns {Promise<Object>} - Response dari server dengan data dokumen yang dibuat
  * @throws {Error} - Error jika upload gagal
  */
-export const uploadFile = async (file, metadata) => {
-  try {
-    // Buat FormData untuk multipart/form-data request
-    const formData = new FormData();
-    formData.append("file", file); // File PDF
-    formData.append("code", metadata.code); // Kode SOP (required)
-    formData.append("title", metadata.title); // Judul SOP (required)
-    formData.append("organization", metadata.organization || ""); // Organisasi (optional)
-    formData.append("effective_date", metadata.effective_date || ""); // Tanggal efektif (optional)
-    formData.append("version", metadata.version || ""); // Versi dokumen (optional)
-
-    // Request POST dengan Content-Type multipart/form-data
-    const response = await api.post("/upload", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error("Upload error:", error);
-    throw new Error(
-      error.response?.data?.error ||
-        error.response?.data?.message ||
-        "Failed to upload file"
-    );
-  }
-};
+// Upload file endpoint tidak digunakan; fungsi dihapus
 
 // Update document
 export const updateDocPdf = async (id, docData) => {
@@ -204,45 +113,7 @@ export const updateDocPdf = async (id, docData) => {
 };
 
 // Update file with optional file replacement
-export const updateFile = async (id, file, metadata, archiveReason = null) => {
-  try {
-    const formData = new FormData();
-
-    if (file) {
-      formData.append("file", file);
-    }
-
-    formData.append("code", metadata.code);
-    formData.append("title", metadata.title);
-    formData.append("organization", metadata.organization || "");
-    formData.append("effective_date", metadata.sop_applicable || "");
-    formData.append("version", metadata.version || "");
-    if (metadata.version_mode)
-      formData.append("version_mode", metadata.version_mode);
-    if (metadata.version_type)
-      formData.append("version_type", metadata.version_type);
-
-    // Add archive_reason if provided
-    if (archiveReason) {
-      formData.append("archive_reason", archiveReason);
-    }
-
-    const response = await api.put(`/update-file/${id}`, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error("Update error:", error);
-    throw new Error(
-      error.response?.data?.error ||
-        error.response?.data?.message ||
-        "Failed to update file"
-    );
-  }
-};
+// Endpoint update-file tidak digunakan; fungsi dihapus
 
 // Publish document
 export const publishDocPdf = async (id) => {

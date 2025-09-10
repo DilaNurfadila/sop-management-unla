@@ -122,6 +122,29 @@ export const getApprovedSopsByAdminUnit = async () => {
   }
 };
 
+/**
+ * Mengambil daftar admin users untuk reviewer dan approver
+ * @returns {Promise} Response dengan daftar admin users
+ */
+export const getAdminUsers = async () => {
+  try {
+    // Menggunakan endpoint users karena API ada di userController
+    const response = await axios.get(
+      "http://localhost:5000/api/users/admin/admins",
+      {
+        withCredentials: true,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error fetching admin users:", error);
+    throw error;
+  }
+};
+
 // Export semua fungsi
 export default {
   getUsersByAdminUnit,
@@ -131,4 +154,5 @@ export default {
   updateAssignmentStatus,
   deleteAssignment,
   getApprovedSopsByAdminUnit,
+  getAdminUsers,
 };

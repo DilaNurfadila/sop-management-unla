@@ -45,9 +45,29 @@ exports.updateSopActivity = async (req, res) => {
   const { id } = req.params;
   const { name, order_index } = req.body;
   try {
+    // Build dynamic query based on provided fields
+    let updateFields = [];
+    let values = [];
+
+    if (name !== undefined) {
+      updateFields.push("name = ?");
+      values.push(name);
+    }
+
+    if (order_index !== undefined) {
+      updateFields.push("order_index = ?");
+      values.push(order_index);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ message: "No fields to update" });
+    }
+
+    values.push(id);
+
     const [result] = await db.execute(
-      "UPDATE sop_activities SET name = ?, order_index = ? WHERE id = ?",
-      [name, order_index, id]
+      `UPDATE sop_activities SET ${updateFields.join(", ")} WHERE id = ?`,
+      values
     );
     if (result.affectedRows === 0)
       return res.status(404).json({ message: "Activity not found" });

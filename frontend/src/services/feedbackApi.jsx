@@ -85,5 +85,26 @@ export const deleteFeedback = async (feedbackId) => {
   }
 };
 
+/**
+ * Function untuk membalas feedback (akses admin/admin_unit)
+ * @param {string|number} feedbackId - ID feedback yang akan dibalas
+ * @param {Object} responseData - Data balasan dari admin (response)
+ * @returns {Promise<Object>} - Response konfirmasi balasan
+ * @throws {Error} - Error jika balasan gagal
+ */
+export const replyFeedback = async (feedbackId, responseData) => {
+  try {
+    // Request POST untuk reply feedback berdasarkan ID
+    const response = await feedbackApi.post(
+      `/${feedbackId}/reply`,
+      responseData
+    );
+    return response.data;
+  } catch (error) {
+    // Throw error data dari response atau error object
+    throw error.response?.data || error;
+  }
+};
+
 // Export default instance axios untuk feedback API
 export default feedbackApi;

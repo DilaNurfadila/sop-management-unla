@@ -5,6 +5,7 @@ import {
 } from "../../services/sopCreatorApi";
 import Notification from "../../components/Notification";
 import { useAdminPermissions } from "../../hooks/useAdminRole";
+import { FiX, FiSearch } from "react-icons/fi";
 
 const AssignmentManagementPage = () => {
   // Admin permissions check
@@ -13,6 +14,7 @@ const AssignmentManagementPage = () => {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // State untuk notification
   const [notification, setNotification] = useState({
@@ -130,7 +132,7 @@ const AssignmentManagementPage = () => {
       pending: {
         bg: "bg-yellow-100",
         text: "text-yellow-800",
-        label: "Menunggu Respons",
+        label: "Menunggu Respon",
       },
       accepted: { bg: "bg-blue-100", text: "text-blue-800", label: "Diterima" },
       rejected: { bg: "bg-red-100", text: "text-red-800", label: "Ditolak" },
@@ -164,6 +166,21 @@ const AssignmentManagementPage = () => {
       year: "numeric",
     });
   };
+
+  // Function untuk filter penugasan berdasarkan search term
+  const filteredAssignments = assignments.filter((assignment) => {
+    if (!searchTerm) return true;
+
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      assignment.assignee_name?.toLowerCase().includes(searchLower) ||
+      assignment.assignee_email?.toLowerCase().includes(searchLower) ||
+      assignment.notes?.toLowerCase().includes(searchLower) ||
+      assignment.status?.toLowerCase().includes(searchLower) ||
+      assignment.task_type?.toLowerCase().includes(searchLower) ||
+      assignment.assignee_response?.toLowerCase().includes(searchLower)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -266,6 +283,40 @@ const AssignmentManagementPage = () => {
           </div>
         )}
 
+        {/* Search Bar */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <div className="flex items-center space-x-4">
+            <div className="flex-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FiSearch className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Cari berdasarkan nama, email, catatan, status, atau jenis tugas..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                <FiX className="h-4 w-4 mr-1" />
+                Clear
+              </button>
+            )}
+          </div>
+          {searchTerm && (
+            <div className="mt-3 text-sm text-gray-600">
+              Menampilkan {filteredAssignments.length} dari {assignments.length}{" "}
+              penugasan untuk "{searchTerm}"
+            </div>
+          )}
+        </div>
+
         {/* Main Content */}
         <div className="bg-white shadow-sm rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
@@ -297,15 +348,26 @@ const AssignmentManagementPage = () => {
                   Memuat data penugasan...
                 </span>
               </div>
-            ) : assignments.length === 0 ? (
+            ) : filteredAssignments.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">📋</div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Belum Ada Penugasan
+                  {searchTerm
+                    ? "Tidak ada hasil pencarian"
+                    : "Belum Ada Penugasan"}
                 </h3>
                 <p className="text-gray-500">
-                  Anda belum membuat penugasan SOP untuk anggota unit.
+                  {searchTerm
+                    ? `Tidak ditemukan penugasan yang sesuai dengan "${searchTerm}"`
+                    : "Anda belum membuat penugasan SOP untuk anggota unit."}
                 </p>
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="mt-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Lihat Semua Penugasan
+                  </button>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -333,7 +395,7 @@ const AssignmentManagementPage = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {assignments.map((assignment) => (
+                    {filteredAssignments.map((assignment) => (
                       <tr key={assignment.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <div>

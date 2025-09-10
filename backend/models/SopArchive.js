@@ -21,7 +21,7 @@ class SopArchive {
         a.status,
         a.created_by,
         a.archived_by,
-        a.archived_reason as reason,
+  a.archived_reason as archived_reason,
         a.original_created_at,
         a.archived_at,
         u.name as archived_by_name, 
@@ -90,40 +90,78 @@ class SopArchive {
 
   /**
    * Mendapatkan statistik arsip
+   * @param {string} userRole - Role user (admin, admin_unit, user)
+   * @param {string} userUnit - Unit kerja user
    * @returns {Promise<Object>} Object berisi statistik arsip
    */
-  static async getArchiveStats() {
-    const [totalArchived] = await pool.query(
-      `SELECT COUNT(*) as total FROM sop_archive`
-    );
+  static async getArchiveStats(userRole = null, userUnit = null) {
+    // Base query conditions berdasarkan role dan unit
+    let whereCondition = "";
+    let params = [];
 
-    const [recentArchives] = await pool.query(
-      `SELECT COUNT(*) as total FROM sop_archive 
-       WHERE archived_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)`
-    );
+    // Jika bukan admin, filter berdasarkan unit
+    if (userRole !== "admin") {
+      whereCondition = "WHERE sd.unit_scope = ?";
+      params.push(userUnit);
+    }
 
-    const [archivesByMonth] = await pool.query(
-      `SELECT 
-        YEAR(archived_at) as year,
-        MONTH(archived_at) as month,
-        COUNT(*) as count
-       FROM sop_archive 
-       WHERE archived_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
-       GROUP BY YEAR(archived_at), MONTH(archived_at)
-       ORDER BY year, month`
-    );
+    // Total dokumen yang diarsipkan
+    const archiveQuery =
+      userRole === "admin"
+        ? `SELECT COUNT(*) as total FROM sop_archive`
+        : `SELECT COUNT(*) as total FROM sop_archive sa
+         LEFT JOIN sop_documents sd ON sa.original_sop_id = sd.id
+         ${whereCondition}`;
 
-    const [uniqueDocuments] = await pool.query(
-      `SELECT COUNT(DISTINCT original_sop_id) as total FROM sop_archive`
-    );
+    const [totalArchived] = await pool.query(archiveQuery, params);
+
+    // Total dokumen aktif (tidak diarsipkan)
+    const activeQuery =
+      userRole === "admin"
+        ? `SELECT COUNT(*) as total FROM sop_documents 
+         WHERE status NOT IN ('archived', 'deleted')`
+        : `SELECT COUNT(*) as total FROM sop_documents 
+         WHERE status NOT IN ('archived', 'deleted') AND unit_scope = ?`;
+
+    const activeParams = userRole === "admin" ? [] : [userUnit];
+    const [totalActive] = await pool.query(activeQuery, activeParams);
+
+    // Dokumen unik yang memiliki arsip
+    const documentsQuery =
+      userRole === "admin"
+        ? `SELECT COUNT(DISTINCT original_sop_id) as total FROM sop_archive`
+        : `SELECT COUNT(DISTINCT sa.original_sop_id) as total FROM sop_archive sa
+         LEFT JOIN sop_documents sd ON sa.original_sop_id = sd.id
+         ${whereCondition}`;
+
+    const [documentsWithArchives] = await pool.query(documentsQuery, params);
+
+    // Arsip terbaru (30 hari terakhir)
+    const recentQuery =
+      userRole === "admin"
+        ? `SELECT sa.*, sd.title as original_title, u.name as archived_by_name
+         FROM sop_archive sa
+         LEFT JOIN sop_documents sd ON sa.original_sop_id = sd.id
+         LEFT JOIN users u ON sa.archived_by = u.id
+         WHERE sa.archived_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+         ORDER BY sa.archived_at DESC
+         LIMIT 10`
+        : `SELECT sa.*, sd.title as original_title, u.name as archived_by_name
+         FROM sop_archive sa
+         LEFT JOIN sop_documents sd ON sa.original_sop_id = sd.id
+         LEFT JOIN users u ON sa.archived_by = u.id
+         WHERE sa.archived_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) AND sd.unit_scope = ?
+         ORDER BY sa.archived_at DESC
+         LIMIT 10`;
+
+    const recentParams = userRole === "admin" ? [] : [userUnit];
+    const [recentArchives] = await pool.query(recentQuery, recentParams);
 
     return {
-      totalArchived: totalArchived[0].total,
-      totalRestored: 0, // Tidak ada kolom restored di tabel sop_archive
-      activeArchives: totalArchived[0].total,
-      recentArchives: recentArchives[0].total,
-      uniqueDocuments: uniqueDocuments[0].total,
-      archivesByMonth: archivesByMonth,
+      total_archived: totalArchived[0].total,
+      total_active: totalActive[0].total,
+      documents_with_archives: documentsWithArchives[0].total,
+      recent_archives: recentArchives,
     };
   }
   /**
@@ -310,7 +348,7 @@ class SopArchive {
         id,
         title,
         description,
-        file_path, // Link firebase lama yang akan diarsipkan
+        file_path,
         file_name,
         file_size,
         version,
@@ -326,7 +364,7 @@ class SopArchive {
         id,
         title,
         description,
-        file_path, // INSERT link firebase lama ke field file_path di sop_archive
+        file_path,
         file_name,
         file_size,
         version,
@@ -336,7 +374,7 @@ class SopArchive {
         archivedBy,
         reason,
         created_at,
-      ]; // Step 1: INSERT link firebase lama ke sop_archive
+      ];
       const [result] = await connection.query(
         `INSERT INTO sop_archive 
          (original_sop_id, title, description, file_path, file_name, file_size, 
@@ -346,7 +384,7 @@ class SopArchive {
         queryParams
       );
 
-      await connection.commit(); // Step 2: Setelah ini, controller akan INSERT link firebase baru ke sop_documents
+      await connection.commit();
       if (result.affectedRows === 1) {
         return {
           id: result.insertId,
@@ -456,7 +494,7 @@ class SopArchive {
       );
 
       if (existingRows.length > 0) {
-        // Document exists - this is a file restore (tukar link firebase)
+        // Document exists - this is a file restore (replace stored link)
         // Step 1: INSERT/UPDATE ke sop_documents (tukar URL dari archive ke documents)
         await connection.query(
           `UPDATE sop_documents 

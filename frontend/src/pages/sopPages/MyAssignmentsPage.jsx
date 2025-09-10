@@ -5,6 +5,7 @@ import {
   updateAssignmentStatus,
 } from "../../services/sopCreatorApi";
 import Notification from "../../components/Notification";
+import { FiX, FiSearch } from "react-icons/fi";
 
 const MyAssignmentsPage = () => {
   // Hook untuk navigasi
@@ -14,6 +15,7 @@ const MyAssignmentsPage = () => {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // State untuk modal response
   const [showResponseModal, setShowResponseModal] = useState(false);
@@ -204,7 +206,7 @@ const MyAssignmentsPage = () => {
       pending: {
         bg: "bg-yellow-100",
         text: "text-yellow-800",
-        label: "Menunggu Respons",
+        label: "Menunggu Respon",
       },
       accepted: { bg: "bg-blue-100", text: "text-blue-800", label: "Diterima" },
       rejected: { bg: "bg-red-100", text: "text-red-800", label: "Ditolak" },
@@ -251,6 +253,22 @@ const MyAssignmentsPage = () => {
 
     return dueDate < today;
   };
+
+  // Function untuk filter penugasan berdasarkan search term
+  const filteredAssignments = assignments.filter((assignment) => {
+    if (!searchTerm) return true;
+
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      assignment.assigner_name?.toLowerCase().includes(searchLower) ||
+      assignment.notes?.toLowerCase().includes(searchLower) ||
+      assignment.status?.toLowerCase().includes(searchLower) ||
+      assignment.task_type?.toLowerCase().includes(searchLower) ||
+      assignment.assignee_response?.toLowerCase().includes(searchLower) ||
+      assignment.target_sop_title?.toLowerCase().includes(searchLower) ||
+      assignment.target_sop_code?.toLowerCase().includes(searchLower)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -346,6 +364,40 @@ const MyAssignmentsPage = () => {
           </div>
         )}
 
+        {/* Search Bar */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <div className="flex items-center space-x-4">
+            <div className="flex-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FiSearch className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Cari berdasarkan pemberi tugas, catatan, status, jenis tugas, atau SOP target..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                <FiX className="h-4 w-4 mr-1" />
+                Clear
+              </button>
+            )}
+          </div>
+          {searchTerm && (
+            <div className="mt-3 text-sm text-gray-600">
+              Menampilkan {filteredAssignments.length} dari {assignments.length}{" "}
+              penugasan untuk "{searchTerm}"
+            </div>
+          )}
+        </div>
+
         {/* Main Content */}
         <div className="bg-white shadow-sm rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
@@ -377,19 +429,30 @@ const MyAssignmentsPage = () => {
                   Memuat data penugasan...
                 </span>
               </div>
-            ) : assignments.length === 0 ? (
+            ) : filteredAssignments.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">📝</div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Belum Ada Penugasan
+                  {searchTerm
+                    ? "Tidak ada hasil pencarian"
+                    : "Belum Ada Penugasan"}
                 </h3>
                 <p className="text-gray-500">
-                  Anda belum memiliki penugasan pembuatan SOP.
+                  {searchTerm
+                    ? `Tidak ditemukan penugasan yang sesuai dengan "${searchTerm}"`
+                    : "Anda belum memiliki penugasan pembuatan SOP."}
                 </p>
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="mt-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Lihat Semua Penugasan
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-4 p-6">
-                {assignments.map((assignment) => (
+                {filteredAssignments.map((assignment) => (
                   <div
                     key={assignment.id}
                     className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">

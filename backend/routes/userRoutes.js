@@ -43,6 +43,13 @@ router.get(
   userController.searchUsers
 );
 
+// GET /api/users/admin/admins - Mendapatkan admin users untuk reviewer/approver
+router.get(
+  "/admin/admins",
+  authMiddleware.authenticate,
+  userController.getAdminUsers
+);
+
 // DELETE /api/users/admin/:userId - Hapus user (khusus admin)
 router.delete(
   "/admin/:userId",

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import FeedbackModal from "../components/FeedbackModal";
 import { getPublishedDocs } from "../services/publicApi";
-import { downloadDocPdf } from "../services/apiPdf";
 import {
   FiSearch,
   FiFileText,
@@ -118,26 +117,6 @@ const PublishedSOPsPage = () => {
   const handleDownload = async (sop) => {
     // Navigate to the detailed view page
     navigate(`/sop/view/${sop.id}`);
-  };
-
-  const handleDownloadFile = async (sop) => {
-    try {
-      // Gunakan endpoint download yang mencatat aktivitas saat file benar-benar diunduh
-      await downloadDocPdf(sop.id);
-    } catch (error) {
-      console.error("Error downloading document:", error);
-
-      // Show user-friendly error message
-      const errorMessage = error.message || "Gagal mengunduh dokumen";
-      alert(
-        `Error: ${errorMessage}\n\nSilakan coba lagi atau hubungi admin jika masalah berlanjut.`
-      );
-
-      // Fallback jika ada error - buka URL langsung
-      if (sop.url) {
-        window.open(sop.url, "_blank");
-      }
-    }
   };
 
   const handleOpenFeedback = (sop) => {
@@ -435,15 +414,6 @@ const PublishedSOPsPage = () => {
                           </button>
                         )}
                       </>
-                    )}
-
-                    {sop.url && (
-                      <button
-                        onClick={() => handleDownloadFile(sop)}
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
-                        <FiDownload className="mr-2 h-4 w-4" />
-                        Unduh Dokumen
-                      </button>
                     )}
 
                     <button

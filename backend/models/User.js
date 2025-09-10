@@ -257,6 +257,35 @@ class User {
     `);
     return rows;
   }
+
+  /**
+   * Method untuk mencari pengguna berdasarkan role tertentu
+   * @param {Array} roles - Array role yang dicari (e.g., ['admin', 'admin_unit'])
+   * @returns {Array} - Array user dengan role yang sesuai
+   */
+  static async findUsersByRole(roles) {
+    const placeholders = roles.map(() => "?").join(",");
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.position,
+        u.role,
+        u.unit,
+        un.nama_unit as unit_name,
+        un.kode_unit,
+        u.created_at
+      FROM users u
+      LEFT JOIN units un ON u.unit = un.id
+      WHERE u.role IN (${placeholders})
+      ORDER BY u.role ASC, un.nama_unit ASC, u.name ASC
+    `,
+      roles
+    );
+    return rows;
+  }
 }
 
 module.exports = User;

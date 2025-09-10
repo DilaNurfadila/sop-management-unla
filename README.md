@@ -16,6 +16,8 @@ This application is still under development
 
 - Login
 
+- Register
+
 - Forgot password
 
 - SOP Feedback [in update]
@@ -26,7 +28,7 @@ This application is still under development
 
 - Manage users
 
-- Log Activity (only admin) [under maintenance]
+- Log Activity (only admin) [this feature has been temporarily suspended]
 
 - Manage units
 
@@ -67,24 +69,10 @@ Backend :
 - FRONTEND_URL
 - NODE_ENV
 - ENCRYPTION_KEY
-- FIREBASE_API_KEY
-- FIREBASE_AUTH_DOMAIN
-- FIREBASE_PROJECT_ID
-- FIREBASE_STORAGE_BUCKET
-- FIREBASE_MESSAGING_SENDER_ID
-- FIREBASE_APP_ID
-- FIREBASE_MEASUREMENT_ID
 
 Frontend :
 
 - VITE_SECRET_KEY
-- VITE_FIREBASE_API_KEY
-- VITE_FIREBASE_AUTH_DOMAIN
-- VITE_FIREBASE_PROJECT_ID
-- VITE_FIREBASE_STORAGE_BUCKET
-- VITE_FIREBASE_MESSAGING_SENDER_ID
-- VITE_FIREBASE_APP_ID
-- VITE_FIREBASE_MEASUREMENT_ID
 
 ## Error Possible
 

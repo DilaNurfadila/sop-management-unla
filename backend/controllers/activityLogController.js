@@ -56,11 +56,11 @@ exports.getAllLogs = async (req, res) => {
       date_to,
     } = req.query;
 
-    // Validasi role - hanya admin yang bisa melihat semua log
-    if (req.user.role !== "admin") {
+    // Validasi role - hanya superadmin yang bisa melihat semua log
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Hanya admin yang dapat melihat riwayat aktivitas",
+        message: "Hanya superadmin yang dapat melihat riwayat aktivitas",
       });
     }
 
@@ -101,11 +101,11 @@ exports.getLogById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validasi role - hanya admin yang bisa melihat detail log
-    if (req.user.role !== "admin") {
+    // Validasi role - hanya superadmin yang bisa melihat detail log
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Hanya admin yang dapat melihat detail aktivitas",
+        message: "Hanya superadmin yang dapat melihat detail aktivitas",
       });
     }
 
@@ -137,11 +137,11 @@ exports.searchLogs = async (req, res) => {
   try {
     const { q, page = 1, limit = 50 } = req.query;
 
-    // Validasi role - hanya admin yang bisa mencari log
-    if (req.user.role !== "admin") {
+    // Validasi role - hanya superadmin yang bisa mencari log
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Hanya admin yang dapat mencari riwayat aktivitas",
+        message: "Hanya superadmin yang dapat mencari riwayat aktivitas",
       });
     }
 
@@ -178,11 +178,11 @@ exports.getActivityStats = async (req, res) => {
   try {
     const { days = 7 } = req.query;
 
-    // Validasi role - hanya admin yang bisa melihat statistik
-    if (req.user.role !== "admin") {
+    // Validasi role - hanya superadmin yang bisa melihat statistik
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Hanya admin yang dapat melihat statistik aktivitas",
+        message: "Hanya superadmin yang dapat melihat statistik aktivitas",
       });
     }
 
@@ -215,11 +215,11 @@ exports.createLog = async (req, res) => {
       });
     }
 
-    // Validasi role - hanya admin yang bisa membuat log manual
-    if (req.user.role !== "admin") {
+    // Validasi role - hanya superadmin yang bisa membuat log manual
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Hanya admin yang dapat membuat log aktivitas manual",
+        message: "Hanya superadmin yang dapat membuat log aktivitas manual",
       });
     }
 
@@ -254,11 +254,11 @@ exports.cleanupOldLogs = async (req, res) => {
   try {
     const { days = 90 } = req.body;
 
-    // Validasi role - hanya admin yang bisa cleanup
-    if (req.user.role !== "admin") {
+    // Validasi role - hanya superadmin yang bisa cleanup
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Hanya admin yang dapat melakukan cleanup log",
+        message: "Hanya superadmin yang dapat melakukan cleanup log",
       });
     }
 

@@ -34,23 +34,9 @@ const ActivityLogsPage = () => {
   const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [cleanupDays, setCleanupDays] = useState(90);
 
-  // Access guard - hanya admin penuh yang bisa akses
+  // Access guard - hanya admin penuh yang bisa akses (hindari early return sebelum hooks)
   const userData = getSafeUserDataNoRedirect();
-  if (userData?.role !== "admin") {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="max-w-md mx-auto text-center">
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            <strong className="font-bold">Akses Ditolak!</strong>
-            <span className="block sm:inline">
-              {" "}
-              Hanya admin penuh yang dapat mengakses halaman Riwayat Aktivitas.
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isSuperAdmin = userData?.role === "superadmin";
 
   const loadLogs = useCallback(async () => {
     try {
@@ -92,9 +78,10 @@ const ActivityLogsPage = () => {
 
   // Load data saat komponen dimount
   useEffect(() => {
+    if (!isSuperAdmin) return; // Jangan panggil API jika bukan superadmin
     loadLogs();
     loadStats();
-  }, [loadLogs, loadStats]);
+  }, [isSuperAdmin, loadLogs, loadStats]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -202,6 +189,22 @@ const ActivityLogsPage = () => {
     });
   };
 
+  if (!isSuperAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <strong className="font-bold">Akses Ditolak!</strong>
+            <span className="block sm:inline">
+              {" "}
+              Hanya superadmin yang dapat mengakses halaman Riwayat Aktivitas.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading && logs.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -283,6 +286,7 @@ const ActivityLogsPage = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                autoComplete="off"
               />
             </div>
           </div>
@@ -374,6 +378,7 @@ const ActivityLogsPage = () => {
                     handleFilterChange("date_from", e.target.value)
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  autoComplete="off"
                 />
               </div>
 
@@ -388,6 +393,7 @@ const ActivityLogsPage = () => {
                     handleFilterChange("date_to", e.target.value)
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  autoComplete="off"
                 />
               </div>
             </div>
@@ -746,6 +752,7 @@ const ActivityLogsPage = () => {
                 value={cleanupDays}
                 onChange={(e) => setCleanupDays(parseInt(e.target.value))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                autoComplete="off"
               />
             </div>
             <div className="flex justify-end gap-3">

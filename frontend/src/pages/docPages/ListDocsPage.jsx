@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { submitSopForReview } from "../../services/apiPdf";
-import { getSopByUserUnit } from "../../services/api";
+import { getSopByUserUnit, getDocs } from "../../services/api";
 import api from "../../services/api";
 import { archiveSopDocument } from "../../services/archiveApi.jsx";
 import Notification from "../../components/Notification";
 import CustomModal from "../../components/CustomModal";
 import ArchiveReasonModal from "../../components/ArchiveReasonModal";
+import PublishVisibilityModal from "../../components/PublishVisibilityModal";
 import { useModal } from "../../hooks/useModal";
 import {
   FiX,
@@ -21,6 +22,11 @@ import {
 } from "react-icons/fi";
 import { getSafeUserDataNoRedirect } from "../../utils/cryptoUtils";
 import { dateFormatter } from "../../utils/dateFormatter";
+import {
+  formatTanggalPembuatanFromSop,
+  formatTanggalRevisiFromSop,
+  formatTanggalEfektifFromSop,
+} from "../../utils/sopDateHelpers.jsx";
 
 const ListDocsPage = () => {
   const [pdfFiles, setPdfFiles] = useState([]);
@@ -35,13 +41,29 @@ const ListDocsPage = () => {
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [selectedDocumentForArchive, setSelectedDocumentForArchive] =
     useState(null);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [selectedDocumentForPublish, setSelectedDocumentForPublish] =
+    useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [unitFilter, setUnitFilter] = useState("ALL"); // "ALL" | unit name
+  const [statusFilter, setStatusFilter] = useState("ALL"); // "ALL" | "draft" | "unpublished" | "published"
 
   // Get user data untuk cek role dan ID
   const userData = getSafeUserDataNoRedirect();
 
+  const isSuperadmin = userData?.role === "superadmin";
   const isAdmin = userData?.role === "admin";
   const isAdminUnit = userData?.role === "admin_unit";
+
+  // Kumpulkan opsi unit unik dari hasil fetch
+  const unitOptions = useMemo(() => {
+    const s = new Set();
+    pdfFiles.forEach((f) => {
+      const name = f?.unit_scope_name || f?.organization || "Tidak ditentukan";
+      if (name) s.add(name);
+    });
+    return Array.from(s).sort();
+  }, [pdfFiles]);
 
   // Function untuk mengecek apakah user bisa publikasi SOP tertentu
   const canPublishSop = (file) => {
@@ -65,8 +87,12 @@ const ListDocsPage = () => {
   // Function untuk mengecek apakah user bisa mengarsipkan SOP
   const canArchiveSop = () => {
     if (!userData) return false;
-    // Hanya admin dan admin_unit yang bisa mengarsipkan dokumen
-    return userData.role === "admin" || userData.role === "admin_unit";
+    // Admin, admin_unit, dan superadmin bisa mengarsipkan dokumen
+    return (
+      userData.role === "admin" ||
+      userData.role === "admin_unit" ||
+      userData.role === "superadmin"
+    );
   };
 
   // FUNCTION BARU: Cek apakah user adalah penyusun SOP
@@ -88,6 +114,12 @@ const ListDocsPage = () => {
     // Jangan tampilkan dokumen yang sudah diarsipkan
     if (file.status === "archived") return false;
 
+    // Creator (penyusun) selalu dapat melihat dokumennya sendiri (selama tidak archived)
+    if (userData.id === file.creator_id) return true;
+
+    // Superadmin dapat melihat semua dokumen (kecuali yang diarsipkan)
+    if (userData.role === "superadmin") return true;
+
     // Admin bisa lihat semua dokumen (kecuali yang diarsipkan)
     if (userData.role === "admin") return true;
 
@@ -101,9 +133,8 @@ const ListDocsPage = () => {
     // User biasa hanya bisa lihat dokumen yang sudah dipublikasi
     // ATAU dokumen yang mereka buat sendiri (kecuali yang diarsipkan)
     if (userData.role === "user") {
-      const isCreator = userData.id === file.creator_id;
       const isPublished = file.status === "published";
-      return isCreator || isPublished;
+      return isPublished; // creator case sudah di-handle di atas
     }
 
     return false;
@@ -118,18 +149,25 @@ const ListDocsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await getSopByUserUnit();
+      // Untuk superadmin (dan admin), ambil dari endpoint umum /docs agar backend permission mengatur visibilitas
+      const response =
+        userData?.role === "superadmin"
+          ? await getDocs()
+          : await getSopByUserUnit();
 
-      // Pastikan response.data ada dan berupa array
-      const responseData = response?.data || [];
+      // Normalisasi bentuk respons: /docs mengembalikan array langsung, /docs/my-unit membungkus di { data: [] }
+      const responseData = Array.isArray(response)
+        ? response
+        : response?.data || [];
 
       const formattedData = responseData.map((sop) => ({
         ...sop,
         sop_title: sop.title || sop.name,
         uploader_name: sop.uploader_name || "Unknown",
-        created_at: sop.created_date || sop.created_at,
+        created_at: sop.created_at, // canonical created_at only (no alias)
         organization: sop.unit_scope_name || "Universitas Langlangbuana",
-        creation_date: sop.creation_date || sop.created_date || sop.created_at,
+        approval_date: sop.approval_date || sop.approved_at || null,
+        sop_applicable: sop.sop_applicable || null,
         // Pastikan field ID creator ada
         creator_id: sop.creator_id || sop.uploader_id || null,
         uploader_id: sop.uploader_id || null,
@@ -157,19 +195,23 @@ const ListDocsPage = () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await getSopByUserUnit();
+        const response =
+          userData?.role === "superadmin"
+            ? await getDocs()
+            : await getSopByUserUnit();
 
-        // Pastikan response.data ada dan berupa array
-        const responseData = response?.data || [];
+        const responseData = Array.isArray(response)
+          ? response
+          : response?.data || [];
 
         const formattedData = responseData.map((sop) => ({
           ...sop,
           sop_title: sop.title || sop.name,
           uploader_name: sop.uploader_name || "Unknown",
-          created_at: sop.created_date || sop.created_at,
+          created_at: sop.created_at,
           organization: sop.unit_scope_name || "Universitas Langlangbuana",
-          creation_date:
-            sop.creation_date || sop.created_date || sop.created_at,
+          approval_date: sop.approval_date || sop.approved_at || null,
+          sop_applicable: sop.sop_applicable || null,
           // Pastikan field ID creator ada
           creator_id: sop.creator_id || sop.uploader_id || null,
           uploader_id: sop.uploader_id || null,
@@ -271,11 +313,27 @@ const ListDocsPage = () => {
     }
   };
 
-  const handlePublishSop = async (fileId) => {
+  const openPublishModal = (file) => {
+    setSelectedDocumentForPublish(file);
+    setShowPublishModal(true);
+  };
+
+  const handlePublishConfirm = async (visibility) => {
+    const fileId = selectedDocumentForPublish?.id;
+    if (!fileId) return;
     try {
       setLoadingStates((prev) => ({ ...prev, [`publish_${fileId}`]: true }));
-      await api.put(`/docs/publish/${fileId}`);
-      showNotification("SOP berhasil dipublikasikan", "success");
+      await api.put(`/docs/publish/${fileId}`, {
+        public_visibility: visibility,
+      });
+      showNotification(
+        visibility === "everyone"
+          ? "SOP dipublikasikan untuk semua orang"
+          : "SOP dipublikasikan untuk internal unit",
+        "success"
+      );
+      setShowPublishModal(false);
+      setSelectedDocumentForPublish(null);
       await fetchPdfFiles();
     } catch (error) {
       showNotification(
@@ -343,23 +401,30 @@ const ListDocsPage = () => {
 
   // Function untuk filter dokumen berdasarkan search term
   const filteredPdfFiles = pdfFiles.filter((file) => {
-    if (!searchTerm) return true;
-
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchesSearch =
+      !searchTerm ||
       file.sop_title?.toLowerCase().includes(searchLower) ||
       file.sop_code?.toLowerCase().includes(searchLower) ||
       file.uploader_name?.toLowerCase().includes(searchLower) ||
-      file.organization?.toLowerCase().includes(searchLower) ||
+      (file.organization || file.unit_scope_name || "")
+        ?.toLowerCase()
+        .includes(searchLower) ||
       file.status?.toLowerCase().includes(searchLower) ||
-      file.review_status?.toLowerCase().includes(searchLower)
-    );
+      file.review_status?.toLowerCase().includes(searchLower);
+
+    const fileUnit =
+      file.unit_scope_name || file.organization || "Tidak ditentukan";
+    const matchesUnit =
+      unitFilter === "ALL" ? true : String(fileUnit) === String(unitFilter);
+
+    const matchesStatus =
+      statusFilter === "ALL" ? true : file.status === statusFilter;
+
+    return matchesSearch && matchesUnit && matchesStatus;
   });
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    return dateFormatter(dateString);
-  };
+  // Local formatDate no longer used; centralized helpers handle date labels.
 
   if (loading) {
     return (
@@ -384,14 +449,14 @@ const ListDocsPage = () => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                {isAdmin
+                {isAdmin || isSuperadmin
                   ? "📋 Manajemen Semua SOP"
                   : isAdminUnit
                   ? "📋 SOP Unit Kerja"
                   : "📋 SOP Unit Kerja Saya"}
               </h1>
               <p className="text-gray-600">
-                {isAdmin
+                {isAdmin || isSuperadmin
                   ? "Kelola dan publikasi semua dokumen Standard Operating Procedure di seluruh universitas"
                   : isAdminUnit
                   ? "Kelola dokumen Standard Operating Procedure untuk unit kerja Anda"
@@ -403,7 +468,7 @@ const ListDocsPage = () => {
 
         {/* Search Bar */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center flex-wrap gap-4">
             <div className="flex-1">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -415,15 +480,51 @@ const ListDocsPage = () => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  autoComplete="off"
                 />
               </div>
             </div>
-            {searchTerm && (
+            {/* Filter Unit */}
+            {(isAdmin || isSuperadmin) && (
+              <div>
+                <select
+                  value={unitFilter}
+                  onChange={(e) => setUnitFilter(e.target.value)}
+                  className="min-w-[200px] px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  title="Filter Unit Kerja">
+                  <option value="ALL">Semua Unit</option>
+                  {unitOptions.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Filter Status */}
+            <div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="min-w-[180px] px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Filter Status">
+                <option value="ALL">Semua Status</option>
+                <option value="draft">Draft</option>
+                <option value="unpublished">Belum Dipublikasi</option>
+                <option value="published">Dipublikasi</option>
+              </select>
+            </div>
+            {(searchTerm || unitFilter !== "ALL" || statusFilter !== "ALL") && (
               <button
-                onClick={() => setSearchTerm("")}
+                onClick={() => {
+                  setSearchTerm("");
+                  setUnitFilter("ALL");
+                  setStatusFilter("ALL");
+                }}
                 className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                 <FiX className="h-4 w-4 mr-1" />
-                Clear
+                Reset
               </button>
             )}
           </div>
@@ -441,7 +542,7 @@ const ListDocsPage = () => {
             <div className="flex items-center mb-4">
               <FiShield className="h-6 w-6 text-blue-600 mr-3" />
               <h2 className="text-lg font-semibold text-gray-900">
-                {isAdmin
+                {isAdmin || isSuperadmin
                   ? "Informasi Sistem"
                   : isAdminUnit
                   ? "Informasi Unit Kerja"
@@ -449,7 +550,26 @@ const ListDocsPage = () => {
               </h2>
             </div>
 
-            {isAdmin ? (
+            {isSuperadmin ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Status Admin</p>
+                  <p className="font-medium text-green-600">
+                    Superadministrator Universitas
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Akses</p>
+                  <p className="font-medium text-gray-900">Semua Unit Kerja</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Total SOP</p>
+                  <p className="font-medium text-blue-600 text-lg">
+                    {pdfFiles.length} dokumen
+                  </p>
+                </div>
+              </div>
+            ) : isAdmin ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Status Admin</p>
@@ -546,7 +666,7 @@ const ListDocsPage = () => {
               <p className="text-gray-500 mb-4">
                 {searchTerm
                   ? `Tidak ditemukan dokumen yang sesuai dengan "${searchTerm}"`
-                  : isAdmin
+                  : isAdmin || isSuperadmin
                   ? "Tidak ada dokumen SOP yang tersedia di sistem saat ini"
                   : isAdminUnit
                   ? "Tidak ada dokumen SOP yang tersedia untuk unit kerja Anda saat ini"
@@ -628,20 +748,45 @@ const ListDocsPage = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            file.status === "published"
-                              ? "bg-green-100 text-green-800"
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              file.status === "published"
+                                ? "bg-green-100 text-green-800"
+                                : file.status === "unpublished"
+                                ? "bg-orange-100 text-orange-800"
+                                : "bg-yellow-100 text-yellow-800"
+                            }`}>
+                            {file.status === "published"
+                              ? "Dipublikasi"
                               : file.status === "unpublished"
-                              ? "bg-orange-100 text-orange-800"
-                              : "bg-yellow-100 text-yellow-800"
-                          }`}>
-                          {file.status === "published"
-                            ? "Dipublikasi"
-                            : file.status === "unpublished"
-                            ? "Belum Dipublikasi"
-                            : "Draft"}
-                        </span>
+                              ? "Belum Dipublikasi"
+                              : "Draft"}
+                          </span>
+                          {file.status === "published" && (
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                file.public_visibility === "everyone"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : file.public_visibility === "unit"
+                                  ? "bg-gray-100 text-gray-800"
+                                  : "bg-gray-50 text-gray-400"
+                              }`}
+                              title={
+                                file.public_visibility === "everyone"
+                                  ? "Tampil di /sop (publik)"
+                                  : file.public_visibility === "unit"
+                                  ? "Hanya internal unit (/docs)"
+                                  : "Visibilitas belum ditentukan"
+                              }>
+                              {file.public_visibility === "everyone"
+                                ? "Publik"
+                                : file.public_visibility === "unit"
+                                ? "Internal Unit"
+                                : "-"}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {file.unit_scope_name ? (
@@ -657,43 +802,19 @@ const ListDocsPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex items-center">
                           <FiCalendar className="mr-1 h-4 w-4" />
-                          {file.approval_date ? (
-                            formatDate(file.approval_date)
-                          ) : (
-                            <span className="text-gray-400 italic">
-                              Belum disahkan
-                            </span>
-                          )}
+                          {formatTanggalPembuatanFromSop(file)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex items-center">
                           <FiCalendar className="mr-1 h-4 w-4" />
-                          {/* Tampilkan tanggal efektif hanya jika SOP sudah disahkan */}
-                          {file.effective_date &&
-                          file.approval_date &&
-                          (file.status === "published" ||
-                            file.status === "unpublished") &&
-                          file.review_status === "approved" ? (
-                            formatDate(file.effective_date)
-                          ) : (
-                            <span className="text-gray-400 italic">
-                              Belum ditetapkan
-                            </span>
-                          )}
+                          {formatTanggalEfektifFromSop(file)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex items-center">
                           <FiCalendar className="mr-1 h-4 w-4" />
-                          {/* Tampilkan tanggal revisi jika ada dan setelah tanggal pengesahan */}
-                          {file.revision_date ? (
-                            formatDate(file.revision_date)
-                          ) : (
-                            <span className="text-gray-400 italic">
-                              Belum ada revisi
-                            </span>
-                          )}
+                          {formatTanggalRevisiFromSop(file)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -751,7 +872,7 @@ const ListDocsPage = () => {
                               <>
                                 {file.status !== "published" ? (
                                   <button
-                                    onClick={() => handlePublishSop(file.id)}
+                                    onClick={() => openPublishModal(file)}
                                     disabled={
                                       loadingStates[`publish_${file.id}`]
                                     }
@@ -949,6 +1070,17 @@ const ListDocsPage = () => {
           onClose={handleArchiveCancel}
           onConfirm={handleArchiveConfirm}
           isLoading={loadingStates[`archive_${selectedDocumentForArchive?.id}`]}
+        />
+
+        {/* Publish Visibility Modal */}
+        <PublishVisibilityModal
+          isOpen={showPublishModal}
+          onClose={() => {
+            setShowPublishModal(false);
+            setSelectedDocumentForPublish(null);
+          }}
+          onConfirm={handlePublishConfirm}
+          isLoading={loadingStates[`publish_${selectedDocumentForPublish?.id}`]}
         />
       </div>
     </div>

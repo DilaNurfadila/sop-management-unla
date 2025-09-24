@@ -93,37 +93,18 @@ exports.getPublishedDocs = async (req, res) => {
     // Ambil dokumen SOP dengan status 'published' dari database
     const allDocs = await SopDoc.findPublishedSopDocs();
 
-    // Cek apakah ada token user (opsional untuk public endpoint)
-    let userUnit = null;
-    if (req.headers.authorization) {
-      try {
-        const token = req.headers.authorization.split(" ")[1];
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        userUnit = decoded.unit; // Ambil unit user dari token
-      } catch (tokenError) {
-        // Token invalid atau tidak ada, user dianggap sebagai guest
-        throw new Error("Invalid or no token provided");
-      }
-    }
-
-    // Filter dokumen berdasarkan aturan visibilitas
+    // Aturan baru: halaman /sop hanya menampilkan dokumen yang dipublikasi untuk SEMUA ORANG (public_visibility = 'everyone').
+    // Dokumen dengan visibility 'unit' tidak boleh tampil di sini meskipun user login.
     const filteredDocs = allDocs.filter((doc) => {
-      // Dokumen dengan unit_scope = 1 (Universitas) terlihat untuk semua orang
-      if (doc.unit_scope === 1) {
-        return true;
+      const visibility = doc.public_visibility || null;
+      if (visibility) {
+        return visibility === "everyone";
       }
-
-      // Dokumen dengan unit_scope lain hanya terlihat oleh user dari unit yang sama
-      if (userUnit && doc.unit_scope === userUnit) {
-        return true;
-      }
-
-      // Jika user adalah guest (tidak login) atau bukan dari unit yang sama,
-      // dokumen tidak terlihat
-      return false;
+      // Fallback jika kolom belum ada: gunakan aturan lama berbasis ruang lingkup
+      // unit_scope = 1 (Universitas) => treated as public/everyone
+      return Number(doc.unit_scope) === 1;
     });
 
-    // Kirim response sukses dengan data dokumen yang sudah difilter
     res.status(200).json(filteredDocs);
   } catch (error) {
     // Handle error dan kirim response error
@@ -149,17 +130,42 @@ exports.getPublishedSopContent = async (req, res) => {
       });
     }
 
-    // Pastikan dokumen sudah disahkan dan bisa diakses publik
-    // SOP bisa diakses jika: published ATAU (unpublished + approved)
-    const isAccessible =
-      doc.status === "published" ||
-      (doc.status === "unpublished" && doc.review_status === "approved");
+    // Akses publik:
+    // - published & visibility = 'everyone' => selalu boleh
+    // - published & visibility = 'unit' => TIDAK boleh via public endpoint
+    // - unpublished + approved => boleh untuk creator/admin/admin_unit (via token jika ada)
+    if (doc.status !== "published") {
+      const role = req.user?.role;
+      const userId = req.user?.id;
+      const allowedRoles = ["admin", "admin_unit"];
+      const isCreator =
+        userId && doc.creator_id && Number(doc.creator_id) === Number(userId);
+      const isAllowedRole = role && allowedRoles.includes(role);
 
-    if (!isAccessible) {
-      return res.status(403).json({
-        success: false,
-        message: "SOP document is not published or approved",
-      });
+      if (!(doc.review_status === "approved" && (isCreator || isAllowedRole))) {
+        return res.status(403).json({
+          success: false,
+          message: "SOP document is not accessible",
+        });
+      }
+    } else {
+      // Published
+      const visibility = doc.public_visibility || null;
+      // Jika ada kolom visibility dan diset 'unit', blokir akses public endpoint
+      if (visibility && visibility === "unit") {
+        return res.status(403).json({
+          success: false,
+          message: "SOP ini hanya tersedia untuk internal unit",
+        });
+      }
+      // Fallback: jika kolom belum ada, gunakan aturan lama berbasis unit_scope
+      // unit_scope = 1 dianggap public, selain itu tolak di endpoint public
+      if (!visibility && Number(doc.unit_scope) !== 1) {
+        return res.status(403).json({
+          success: false,
+          message: "SOP ini hanya tersedia untuk internal unit",
+        });
+      }
     }
 
     // Kirim response sukses dengan data konten SOP
@@ -168,7 +174,6 @@ exports.getPublishedSopContent = async (req, res) => {
       sop_code: doc.sop_code,
       sop_title: doc.title,
       version: doc.version,
-      revision_type: doc.revision_type,
       goals: doc.goals,
       scope: doc.scope,
       definition: doc.definition,
@@ -178,10 +183,9 @@ exports.getPublishedSopContent = async (req, res) => {
       review_status: doc.review_status,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
-      creation_date: doc.creation_date,
-      effective_date: doc.effective_date,
+      approval_date: doc.approval_date, // canonical
       revision_date: doc.revision_date,
-      approval_date: doc.approval_date,
+      sop_applicable: doc.sop_applicable,
       creator_name: doc.uploader_name,
       unit_name: doc.unit_name,
       reviewer_name: doc.reviewer_name,
@@ -190,8 +194,8 @@ exports.getPublishedSopContent = async (req, res) => {
       organization: doc.organization,
       unit_scope: doc.unit_scope,
       unit_scope_name: doc.unit_scope_name,
+      public_visibility: doc.public_visibility,
       qr_checksum: doc.qr_checksum,
-      sop_applicable: doc.sop_applicable,
     };
 
     res.status(200).json({
@@ -411,6 +415,24 @@ exports.publishDoc = async (req, res) => {
     // Ubah status dokumen menjadi 'published'
     await SopDoc.publishSopDoc(req.params.id);
 
+    // Simpan pilihan visibilitas jika dikirim dari frontend
+    const visibility = req.body?.public_visibility;
+    if (visibility === "everyone" || visibility === "unit") {
+      try {
+        const pool = require("../config/db");
+        await pool.query(
+          "UPDATE sop_documents SET public_visibility = ? WHERE id = ?",
+          [visibility, req.params.id]
+        );
+      } catch (e) {
+        // Jika kolom belum ada, jangan gagalkan publish
+        console.warn(
+          "public_visibility column missing or update failed, continuing publish",
+          e.message
+        );
+      }
+    }
+
     // Generate QR code untuk bukti pengesahan SOP
     try {
       const pool = require("../config/db");
@@ -442,18 +464,11 @@ exports.publishDoc = async (req, res) => {
       req.user,
       "PUBLISH",
       `User ${req.user.name} mempublikasi dokumen SOP: ${
-        doc?.sop_title || doc?.title || "Unknown Document"
-      }`,
+        updatedDoc?.title || updatedDoc?.sop_title || "Unknown Document"
+      } (Kode: ${updatedDoc?.sop_code || "-"})`,
       req,
       { id: req.params.id }
     );
-
-    // Kirim response sukses dengan status published
-    res.status(200).json({
-      message: "SOP document published successfully",
-      status: "published",
-      updatedDoc,
-    });
   } catch (error) {
     // Handle error dan kirim response error
     res.status(400).json({ message: error.message });
@@ -575,12 +590,13 @@ exports.viewDoc = async (req, res) => {
     // cek apakah user login = penyusun
     const isOwner = req.user && doc.user_id === req.user.id;
 
+    // Log aktivitas: hanya tampilkan keterangan judul SOP dan kode SOP
+    const logTitle = doc.title || doc.sop_title || "(tanpa judul)";
+    const logCode = doc.sop_code || "-";
     await logDocumentActivity(
       req.user,
       "VIEW",
-      `User ${req.user.name} membuka dokumen SOP: ${
-        doc.sop_title || "Unknown Document"
-      }`,
+      `User ${req.user.name} melihat dokumen "${logTitle}", kode SOP: ${logCode}`,
       req,
       { id: doc.id }
     );
@@ -783,13 +799,13 @@ exports.getSopContent = async (req, res) => {
       return res.status(404).json({ message: "SOP document not found" });
     }
 
-    // Log aktivitas melihat content SOP
+    // Log aktivitas: hanya tampilkan keterangan judul SOP dan kode SOP
+    const logTitle = doc.title || doc.sop_title || "(tanpa judul)";
+    const logCode = doc.sop_code || "-";
     await logDocumentActivity(
       req.user,
       "VIEW_CONTENT",
-      `User ${req.user.name} melihat content SOP: ${
-        doc.sop_title || "Unknown Document"
-      }`,
+      `User ${req.user.name} melihat dokumen "${logTitle}", kode SOP: ${logCode}`,
       req,
       { id: doc.id }
     );
@@ -809,13 +825,11 @@ exports.getSopContent = async (req, res) => {
       review_status: doc.review_status,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
-      // Tanggal yang sudah dihitung dengan logika bisnis
-      creation_date: doc.creation_date, // Tanggal disahkan
-      effective_date: doc.effective_date, // Tanggal efektif
-      revision_date: doc.revision_date, // Tanggal revisi (null jika tidak ada)
+      approval_date: doc.approval_date,
+      revision_date: doc.revision_date,
+      sop_applicable: doc.sop_applicable,
       creator_name: doc.uploader_name, // Gunakan field yang benar dari query
       unit_name: doc.unit_name,
-      // Tambahkan nama ruang lingkup unit yang ditentukan saat penugasan
       unit_scope_name: doc.unit_scope_name,
       reviewer_name: doc.reviewer_name,
       approver_name: doc.approver_name,
@@ -825,9 +839,8 @@ exports.getSopContent = async (req, res) => {
       organization: doc.organization,
       assignment_id: doc.assignment_id,
       unit_scope: doc.unit_scope,
-      // QR Code checksum untuk bukti pengesahan
       qr_checksum: doc.qr_checksum,
-      // Tambahkan fields lain yang diperlukan
+      public_visibility: doc.public_visibility,
     };
 
     res.status(200).json({

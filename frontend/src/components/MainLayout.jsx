@@ -20,7 +20,7 @@ const MainLayout = ({
   setCurrentPage,
 }) => {
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
       {/* Sidebar Navigation - Fixed di sebelah kiri */}
       <Sidebar
         sidebarOpen={sidebarOpen}
@@ -29,13 +29,26 @@ const MainLayout = ({
         setCurrentPage={setCurrentPage}
       />
 
+      {/* Mobile overlay when sidebar is open */}
+      <div
+        className={`fixed inset-0 bg-black/40 z-30 md:hidden transition-opacity ${
+          sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
+
       {/* Main Content Area - Flex-1 untuk mengisi sisa ruang */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Navbar - Fixed di atas */}
-        <Navbar sidebarOpen={sidebarOpen} currentPage={currentPage} />
+        <Navbar
+          sidebarOpen={sidebarOpen}
+          currentPage={currentPage}
+          setSidebarOpen={setSidebarOpen}
+        />
 
         {/* Main Content - Scrollable area untuk konten halaman */}
-        <main className="flex-1 overflow-y-auto p-4">
+        <main className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4">
           {/* Outlet untuk nested routes atau default content */}
           {<Outlet /> || <div>Default content if children is empty</div>}
         </main>

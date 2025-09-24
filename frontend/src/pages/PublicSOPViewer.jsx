@@ -14,7 +14,12 @@ import {
   getPublicSopResponsiblePersons,
   getPublicSopVisualizations,
 } from "../services/publicApi";
-import { dateFormatter } from "../utils/dateFormatter";
+// dateFormatter not used directly here; centralized helpers handle formatting.
+import {
+  formatTanggalPembuatanFromSop,
+  formatTanggalRevisiFromSop,
+  formatTanggalEfektifFromSop,
+} from "../utils/sopDateHelpers.jsx";
 import {
   FiArrowLeft,
   FiHome,
@@ -494,10 +499,7 @@ const PublicSOPViewer = () => {
     return tableData;
   }, [items, cols, selectedSops]);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "Tidak tersedia";
-    return dateFormatter(dateString);
-  };
+  // formatDate kept for general usage if needed elsewhere. Date labels below use centralized helpers.
 
   if (loading) {
     return (
@@ -628,9 +630,7 @@ const PublicSOPViewer = () => {
                           Tanggal Pembuatan:
                         </span>
                         <span className="text-right">
-                          {sopData?.approval_date
-                            ? formatDate(sopData?.approval_date)
-                            : "Belum disahkan"}
+                          {formatTanggalPembuatanFromSop(sopData)}
                         </span>
                       </div>
 
@@ -640,18 +640,7 @@ const PublicSOPViewer = () => {
                         </span>
                         <span className="text-right">
                           {/* Tampilkan tanggal revisi hanya jika benar-benar ada revisi setelah disahkan */}
-                          {sopData?.revision_date &&
-                          sopData?.approval_date &&
-                          (sopData?.status === "published" ||
-                            sopData?.review_status === "approved") &&
-                          new Date(sopData?.revision_date) >
-                            new Date(sopData?.approval_date)
-                            ? formatDate(sopData?.revision_date)
-                            : sopData?.approval_date &&
-                              (sopData?.status === "published" ||
-                                sopData?.review_status === "approved")
-                            ? "Belum ada revisi"
-                            : "Tidak ada revisi"}
+                          {formatTanggalRevisiFromSop(sopData)}
                         </span>
                       </div>
 
@@ -661,15 +650,7 @@ const PublicSOPViewer = () => {
                         </span>
                         <span className="text-right">
                           {/* Tampilkan tanggal efektif hanya jika SOP sudah disahkan */}
-                          {sopData?.approval_date &&
-                          (sopData?.status === "published" ||
-                            sopData?.status === "unpublished") &&
-                          sopData?.review_status === "approved"
-                            ? formatDate(
-                                sopData?.sop_applicable ||
-                                  sopData?.effective_date
-                              )
-                            : "Belum ditetapkan"}
+                          {formatTanggalEfektifFromSop(sopData)}
                         </span>
                       </div>
 

@@ -32,6 +32,7 @@ import ArchivePage from "./pages/ArchivePage";
 import UserManagementPage from "./pages/UserManagementPage";
 import UnitManagementPage from "./pages/UnitManagementPage";
 import ActivityLogsPage from "./pages/ActivityLogsPage";
+import FeedbackPage from "./pages/FeedbackPage";
 import SopFlowchartPage from "./pages/SopFlowchartPage";
 import CreateSOPForm from "./pages/sopPages/CreateSOPForm";
 import AssignSopCreatorPage from "./pages/sopPages/AssignSopCreatorPage";
@@ -56,7 +57,12 @@ import { getSafeUserDataNoRedirect } from "./utils/cryptoUtils.jsx";
  */
 function App() {
   // State untuk kontrol sidebar (open/close)
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth >= 768; // open on md+, closed on mobile
+    }
+    return true;
+  });
   // State untuk tracking halaman aktif saat ini
   const [currentPage, setCurrentPage] = useState("dashboard");
 
@@ -97,7 +103,7 @@ function App() {
         <Route path="/sop" element={<PublishedSOPsPage />} />
         <Route path="/sop/public/:id" element={<PublicSOPViewer />} />
         <Route path="/sop/by-unit" element={<SOPByUnitPage />} />
-        {/* <Route path="/sopvis" element={<SOPVizListPage />} /> */}
+        {/* <Route path="/sopvis" element={<SOPVizListPage />} */}
         <Route path="/sopvis/:id" element={<SOPVisualizationLandingPage />} />
         <Route path="/sopvis/create" element={<CreateSOPVizPage />} />
         <Route path="/sopvis/:id/manage" element={<ManageSOPVizPage />} />
@@ -167,7 +173,7 @@ function App() {
             path="/users"
             element={
               <PrivateRoute>
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["superadmin"]}>
                   <UserManagementPage />
                 </ProtectedRoute>
               </PrivateRoute>
@@ -177,7 +183,7 @@ function App() {
             path="/units"
             element={
               <PrivateRoute>
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["superadmin", "admin"]}>
                   <UnitManagementPage />
                 </ProtectedRoute>
               </PrivateRoute>
@@ -187,8 +193,19 @@ function App() {
             path="/activity-logs"
             element={
               <PrivateRoute>
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["superadmin"]}>
                   <ActivityLogsPage />
+                </ProtectedRoute>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/feedback"
+            element={
+              <PrivateRoute>
+                <ProtectedRoute
+                  allowedRoles={["superadmin", "admin", "admin_unit"]}>
+                  <FeedbackPage />
                 </ProtectedRoute>
               </PrivateRoute>
             }

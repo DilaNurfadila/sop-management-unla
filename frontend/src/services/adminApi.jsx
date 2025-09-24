@@ -55,18 +55,6 @@ export const searchUsers = async (query) => {
 };
 
 /**
- * Menghapus pengguna berdasarkan ID (khusus admin)
- */
-export const deleteUser = async (userId) => {
-  try {
-    const response = await adminApi.delete(`/${userId}`);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || { message: "Gagal menghapus pengguna" };
-  }
-};
-
-/**
  * Mengubah role pengguna (khusus admin)
  */
 export const updateUserRole = async (userId, role) => {
@@ -78,10 +66,48 @@ export const updateUserRole = async (userId, role) => {
   }
 };
 
+/**
+ * Menonaktifkan pengguna (khusus admin)
+ */
+export const deactivateUser = async (userId) => {
+  try {
+    const response = await adminApi.put(`/${userId}/deactivate`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Gagal menonaktifkan pengguna" };
+  }
+};
+
+/**
+ * Mengaktifkan kembali pengguna (khusus admin)
+ */
+export const activateUser = async (userId) => {
+  try {
+    const response = await adminApi.put(`/${userId}/activate`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Gagal mengaktifkan pengguna" };
+  }
+};
+
+/**
+ * Membuat pengguna baru (khusus superadmin)
+ */
+export const createUser = async (payload) => {
+  try {
+    const response = await adminApi.post(`/create`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Gagal membuat pengguna" };
+  }
+};
+
 export default {
   getAllUsers,
   getUserStats,
   searchUsers,
-  deleteUser,
   updateUserRole,
+  deactivateUser,
+  activateUser,
+  createUser,
 };

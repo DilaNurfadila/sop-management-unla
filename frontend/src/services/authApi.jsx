@@ -1,6 +1,7 @@
 // Import axios untuk HTTP requests
 import axios from "axios";
 import { installAuthInterceptors } from "./authClient";
+import { decryptUserData, decryptData } from "../utils/cryptoUtils.jsx";
 
 // Base URL untuk API endpoints authentication
 const API_URL = "http://localhost:5000/api/auth";
@@ -144,5 +145,36 @@ export const resetPassword = async (token, email, newPassword) => {
       status: error.response?.status,
       message: error.response?.data?.message || "Failed to reset password",
     };
+  }
+};
+
+/**
+ * Ambil user saat ini dari backend (berdasarkan cookie token)
+ * Mengembalikan object user yang sudah didekripsi, termasuk unit_name jika tersedia.
+ */
+export const getCurrentUser = async () => {
+  try {
+    const response = await axios.get(`${API_URL}/me`);
+    const encUser = response.data?.user;
+    if (!encUser) return null;
+
+    // Gunakan util untuk mendekripsi field umum
+    const user = decryptUserData(encUser);
+    // Tambahkan unit_name jika ada
+    if (encUser.unit_name) {
+      try {
+        user.unit_name = decryptData(encUser.unit_name);
+      } catch (e) {
+        void e;
+        user.unit_name = encUser.unit_name;
+      }
+    }
+    return user;
+  } catch (error) {
+    // Jika 401 berarti tidak terautentikasi
+    if (error?.response?.status === 401) return null;
+    throw new Error(
+      error.response?.data?.message || "Gagal mengambil user saat ini"
+    );
   }
 };

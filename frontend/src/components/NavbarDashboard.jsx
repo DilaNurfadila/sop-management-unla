@@ -7,6 +7,7 @@ import {
   FiUser,
   FiSettings,
   FiLogOut,
+  FiMenu,
 } from "react-icons/fi";
 // Import komponen navigasi dari React Router
 import { Link } from "react-router-dom";
@@ -22,7 +23,7 @@ import { useModal } from "../hooks/useModal";
  * Navbar dengan dropdown profile, notifikasi, dan logout functionality
  * @param {boolean} sidebarOpen - State untuk kontrol visibility sidebar
  */
-const Navbar = ({ sidebarOpen }) => {
+const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
   // State untuk kontrol dropdown profile menu
   const [isOpen, setIsOpen] = useState(false);
   // Ref untuk handle klik di luar dropdown
@@ -113,13 +114,21 @@ const Navbar = ({ sidebarOpen }) => {
   };
 
   return (
-    <header className="bg-white shadow-sm p-4 flex justify-end items-center">
-      {/* Commented out page title - bisa diaktifkan jika diperlukan */}
-      {/* <h2 className="text-xl font-semibold text-gray-800">
-        {currentPage.charAt(0).toUpperCase() + currentPage.slice(1)}
-      </h2> */}
+    <header className="bg-white shadow-sm p-3 sm:p-4 flex items-center justify-between">
+      {/* Left: Hamburger on mobile */}
+      <div className="flex items-center">
+        <button
+          className="p-2 -ml-1 mr-2 rounded hover:bg-gray-100 md:hidden"
+          onClick={() => setSidebarOpen && setSidebarOpen(true)}
+          aria-label="Open sidebar">
+          <FiMenu size={20} />
+        </button>
+        {/* Optional title slot */}
+        {/* <h2 className="text-lg sm:text-xl font-semibold text-gray-800">{currentPage}</h2> */}
+      </div>
 
-      <div className="flex items-center space-x-4">
+      {/* Right: actions cluster */}
+      <div className="flex items-center space-x-3 sm:space-x-4">
         {/* Tombol Notifikasi */}
         <button className="p-2 rounded-full hover:bg-gray-100 relative">
           <FiBell size={20} className="text-gray-600" />

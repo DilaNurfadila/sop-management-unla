@@ -1189,6 +1189,7 @@ function FlowchartView() {
               onChange={(e) => setSopName(e.target.value)}
               placeholder="Masukkan nama SOP"
               required
+              autoComplete="off"
             />
             <button type="submit">Buat SOP</button>
           </form>
@@ -1249,6 +1250,7 @@ function FlowchartView() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Masukkan nama kegiatan"
+                  autoComplete="off"
                 />
                 <button type="submit">Tambah Kegiatan</button>
               </form>
@@ -1275,6 +1277,7 @@ function FlowchartView() {
                     value={responsibleRole}
                     onChange={(e) => setResponsibleRole(e.target.value)}
                     placeholder="Contoh: Pelaksana Utama, Penanggung Jawab, dll"
+                    autoComplete="off"
                   />
                 </div>
                 <button type="submit">Tambah Penanggungjawab</button>
@@ -1293,6 +1296,7 @@ function FlowchartView() {
                           type="text"
                           value={editingName}
                           onChange={(e) => setEditingName(e.target.value)}
+                          autoComplete="off"
                         />
                         <div className="button-group">
                           <button onClick={() => updateItem(item.id)}>

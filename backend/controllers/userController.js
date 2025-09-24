@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const ActivityLog = require("../models/ActivityLog");
+const Unit = require("../models/Unit");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
@@ -283,22 +284,140 @@ exports.changePassword = async (req, res) => {
 // ===== ADMIN MANAGEMENT FUNCTIONS =====
 
 /**
+ * Membuat pengguna baru (khusus superadmin)
+ */
+exports.createUserByAdmin = async (req, res) => {
+  try {
+    // Hanya superadmin yang boleh membuat pengguna baru
+    if (req.user.role !== "superadmin") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Akses ditolak. Hanya superadmin yang dapat mengakses fitur ini.",
+      });
+    }
+
+    const { name, email, password, position, unit, role } = req.body;
+
+    // Validasi input dasar
+    if (!name || !email || !password || !position || !unit) {
+      return res.status(400).json({
+        success: false,
+        message: "Semua field wajib diisi",
+      });
+    }
+
+    // Validasi format email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Format email tidak valid" });
+    }
+
+    // Validasi panjang password
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password minimal 6 karakter",
+      });
+    }
+
+    // Validasi role yang diizinkan
+    const allowedRoles = ["admin", "admin_unit", "user"]; // superadmin tidak boleh dibuat via endpoint ini
+    const finalRole = allowedRoles.includes(role) ? role : "user";
+
+    // Cek apakah email sudah digunakan
+    const existingUser = await User.findByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Email sudah digunakan oleh pengguna lain",
+      });
+    }
+
+    // Validasi unit ada
+    const unitRecord = await Unit.findById(unit);
+    if (!unitRecord) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Unit tidak ditemukan" });
+    }
+
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Buat user
+    const created = await User.createUser({
+      name,
+      email,
+      password: hashedPassword,
+      position,
+      unit,
+      role: finalRole,
+      email_verified: false,
+    });
+
+    // Log aktivitas pembuatan user
+    const adminName = req.user?.name || req.user?.email || "Admin";
+    await logUserActivity(
+      req.user,
+      "CREATE",
+      `Admin (${adminName}) membuat pengguna baru: ${name} (${email}) dengan role ${finalRole}`,
+      req,
+      { id: created.id }
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Pengguna berhasil dibuat",
+      user: {
+        id: created.id,
+        name: created.name,
+        email: created.email,
+        position: created.position,
+        unit: created.unit,
+        role: created.role,
+        created_at: new Date(),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Gagal membuat pengguna",
+    });
+  }
+};
+
+/**
  * Function untuk mendapatkan daftar semua pengguna (khusus admin)
  */
 exports.getAllUsersForAdmin = async (req, res) => {
   try {
     // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {
+    // Catatan: data lengkap semua user hanya untuk superadmin mulai sekarang
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
+        message:
+          "Akses ditolak. Hanya superadmin yang dapat mengakses fitur ini.",
       });
     }
 
     const users = await User.findAllUsers();
 
+    // Kecualikan akun superadmin (termasuk disabled:superadmin) dari daftar
+    const visibleUsers = users.filter(
+      (u) =>
+        u.role !== "superadmin" &&
+        !(
+          typeof u.role === "string" && u.role.startsWith("disabled:superadmin")
+        )
+    );
+
     // Return data user tanpa password
-    const safeUsers = users.map((user) => ({
+    const safeUsers = visibleUsers.map((user) => ({
       id: user.id,
       name: user.name,
       email: user.email,
@@ -326,26 +445,45 @@ exports.getAllUsersForAdmin = async (req, res) => {
  */
 exports.getUserStats = async (req, res) => {
   try {
-    // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {
+    // Cek apakah user yang request adalah superadmin
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
+        message:
+          "Akses ditolak. Hanya superadmin yang dapat mengakses fitur ini.",
       });
     }
 
     const users = await User.findAllUsers();
 
-    // Filter keluar admin dari perhitungan statistik
-    const nonAdminUsers = users.filter((user) => user.role !== "admin");
+    // Filter keluar admin dan superadmin dari perhitungan statistik total
+    const validUsers = users.filter(
+      (user) =>
+        user.role !== "admin" &&
+        user.role !== "superadmin" &&
+        !(
+          typeof user.role === "string" &&
+          user.role.startsWith("disabled:superadmin")
+        )
+    );
 
-    // Hitung statistik berdasarkan role (tanpa admin)
+    // Hitung jumlah admin aktif (tidak termasuk disabled:admin dan superadmin)
+    const adminCount = users.filter((user) => user.role === "admin").length;
+
+    // Hitung statistik berdasarkan role (aktif saja)
+    const adminUnitCount = validUsers.filter(
+      (user) => user.role === "admin_unit"
+    ).length;
+    const normalUserCount = validUsers.filter(
+      (user) => user.role === "user"
+    ).length;
+
     const stats = {
-      total: nonAdminUsers.length, // Total tanpa admin
-      admin: 0, // Admin tidak dihitung
-      admin_unit: nonAdminUsers.filter((user) => user.role === "admin_unit")
-        .length,
-      user: nonAdminUsers.filter((user) => user.role === "user").length,
+      // Total aktif = admin + admin_unit + user (superadmin tidak dihitung)
+      total: adminCount + adminUnitCount + normalUserCount,
+      admin: adminCount,
+      admin_unit: adminUnitCount,
+      user: normalUserCount,
     };
 
     res.status(200).json({
@@ -365,11 +503,12 @@ exports.getUserStats = async (req, res) => {
  */
 exports.deleteUserByAdmin = async (req, res) => {
   try {
-    // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {
+    // Cek apakah user yang request adalah superadmin
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
+        message:
+          "Akses ditolak. Hanya superadmin yang dapat mengakses fitur ini.",
       });
     }
 
@@ -430,11 +569,12 @@ exports.deleteUserByAdmin = async (req, res) => {
  */
 exports.updateUserRole = async (req, res) => {
   try {
-    // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {
+    // Hanya superadmin yang boleh mengubah role
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
-        message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
+        message:
+          "Akses ditolak. Hanya superadmin yang dapat mengakses fitur ini.",
       });
     }
 
@@ -442,7 +582,7 @@ exports.updateUserRole = async (req, res) => {
     const { role } = req.body;
 
     // Validasi role yang diizinkan
-    const allowedRoles = ["admin", "admin_unit", "user"];
+    const allowedRoles = ["admin", "admin_unit", "user"]; // tidak boleh set ke superadmin via endpoint ini
     if (!allowedRoles.includes(role)) {
       return res.status(400).json({
         success: false,
@@ -459,7 +599,7 @@ exports.updateUserRole = async (req, res) => {
       });
     }
 
-    // Jangan biarkan admin mengubah role dirinya sendiri
+    // Jangan biarkan superadmin mengubah role dirinya sendiri
     if (parseInt(userId) === req.user.id) {
       return res.status(400).json({
         success: false,
@@ -467,11 +607,11 @@ exports.updateUserRole = async (req, res) => {
       });
     }
 
-    // Pengecualian: Jangan biarkan mengubah role pengguna admin atau admin_unit
-    if (userToUpdate.role === "admin" || userToUpdate.role === "admin_unit") {
+    // Tidak boleh mengubah role superadmin melalui endpoint ini
+    if (userToUpdate.role === "superadmin") {
       return res.status(400).json({
         success: false,
-        message: "Role admin tidak dapat diubah untuk keamanan sistem",
+        message: "Role superadmin tidak dapat diubah melalui endpoint ini",
       });
     }
 
@@ -503,12 +643,164 @@ exports.updateUserRole = async (req, res) => {
 };
 
 /**
+ * Nonaktifkan pengguna (admin-only)
+ * Melakukan soft-deactivate dengan mengubah role menjadi 'disabled'.
+ */
+exports.deactivateUserByAdmin = async (req, res) => {
+  try {
+    if (req.user.role !== "superadmin") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Akses ditolak. Hanya superadmin yang dapat mengakses fitur ini.",
+      });
+    }
+
+    const { userId } = req.params;
+
+    // Cek apakah user yang akan dinonaktifkan ada
+    const userToDeactivate = await User.findById(userId);
+    if (!userToDeactivate) {
+      return res.status(404).json({
+        success: false,
+        message: "Pengguna tidak ditemukan",
+      });
+    }
+
+    // Jangan biarkan admin menonaktifkan dirinya sendiri
+    if (parseInt(userId) === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: "Anda tidak dapat menonaktifkan akun Anda sendiri",
+      });
+    }
+
+    // Jangan izinkan menonaktifkan admin penuh
+    if (userToDeactivate.role === "superadmin") {
+      return res.status(400).json({
+        success: false,
+        message: "Akun superadmin tidak dapat dinonaktifkan demi keamanan.",
+      });
+    }
+
+    // Jika sudah disabled, tidak perlu update
+    if (
+      typeof userToDeactivate.role === "string" &&
+      userToDeactivate.role.startsWith("disabled")
+    ) {
+      return res.status(200).json({
+        success: true,
+        message: "Akun sudah dalam status nonaktif.",
+      });
+    }
+
+    // Lakukan soft-deactivate dengan set role ke 'disabled:<role_asal>'
+    const previousRole = userToDeactivate.role;
+    const disabledRole = `disabled:${previousRole}`;
+    await User.updateUserRole(userId, disabledRole);
+
+    // Log aktivitas
+    const adminName = req.user?.name || req.user?.email || "Admin";
+    await logUserActivity(
+      req.user,
+      "UPDATE",
+      `Admin (${adminName}) menonaktifkan akun: ${userToDeactivate.name} (${userToDeactivate.email})`,
+      req,
+      { id: userToDeactivate.id }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Pengguna berhasil dinonaktifkan",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Gagal menonaktifkan pengguna",
+    });
+  }
+};
+
+/**
+ * Aktifkan kembali pengguna (admin-only)
+ * Mengubah role dari 'disabled' kembali ke 'user'.
+ */
+exports.activateUserByAdmin = async (req, res) => {
+  try {
+    if (req.user.role !== "superadmin") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Akses ditolak. Hanya superadmin yang dapat mengakses fitur ini.",
+      });
+    }
+
+    const { userId } = req.params;
+
+    const userToActivate = await User.findById(userId);
+    if (!userToActivate) {
+      return res.status(404).json({
+        success: false,
+        message: "Pengguna tidak ditemukan",
+      });
+    }
+
+    // Tidak boleh mengubah akun admin via endpoint ini
+    if (userToActivate.role === "superadmin") {
+      return res.status(400).json({
+        success: false,
+        message: "Akun superadmin tidak dapat diubah melalui endpoint ini.",
+      });
+    }
+
+    // Hanya proses jika memang disabled
+    if (
+      !(
+        typeof userToActivate.role === "string" &&
+        userToActivate.role.startsWith("disabled")
+      )
+    ) {
+      return res.status(200).json({
+        success: true,
+        message: "Akun sudah dalam status aktif.",
+      });
+    }
+
+    // Ambil role asal setelah prefix 'disabled:'
+    const parts = userToActivate.role.split(":");
+    const originalRole = parts[1] || "user";
+    // Cegah promosi ke admin melalui endpoint ini
+    const restoredRole = originalRole === "superadmin" ? "user" : originalRole;
+    await User.updateUserRole(userId, restoredRole);
+
+    const adminName = req.user?.name || req.user?.email || "Admin";
+    await logUserActivity(
+      req.user,
+      "UPDATE",
+      `Admin (${adminName}) mengaktifkan kembali akun: ${userToActivate.name} (${userToActivate.email})`,
+      req,
+      { id: userToActivate.id }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Pengguna berhasil diaktifkan kembali",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengaktifkan pengguna",
+    });
+  }
+};
+
+/**
  * Function untuk mencari pengguna (khusus admin)
  */
 exports.searchUsers = async (req, res) => {
   try {
     // Cek apakah user yang request adalah admin (bukan admin_unit)
-    if (req.user.role !== "admin") {
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
         success: false,
         message: "Akses ditolak. Hanya admin yang dapat mengakses fitur ini.",
@@ -526,8 +818,17 @@ exports.searchUsers = async (req, res) => {
 
     const users = await User.searchUsers(query);
 
+    // Kecualikan superadmin (termasuk disabled:superadmin) dari hasil pencarian
+    const visibleUsers = users.filter(
+      (u) =>
+        u.role !== "superadmin" &&
+        !(
+          typeof u.role === "string" && u.role.startsWith("disabled:superadmin")
+        )
+    );
+
     // Return data user tanpa password
-    const safeUsers = users.map((user) => ({
+    const safeUsers = visibleUsers.map((user) => ({
       id: user.id,
       name: user.name,
       email: user.email,
@@ -560,7 +861,10 @@ exports.getAdminUsers = async (req, res) => {
 
     let users;
 
-    if (currentUserRole === "admin") {
+    if (currentUserRole === "superadmin") {
+      // Superadmin dapat melihat semua admin variations
+      users = await User.findUsersByRole(["superadmin", "admin", "admin_unit"]);
+    } else if (currentUserRole === "admin") {
       // Admin penuh dapat memilih admin_unit dan admin dari semua unit
       users = await User.findUsersByRole(["admin", "admin_unit"]);
     } else if (currentUserRole === "admin_unit") {

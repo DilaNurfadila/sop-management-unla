@@ -235,6 +235,30 @@ exports.saveBulkVisualizations = async (req, res) => {
       .status(400)
       .json({ message: "visualizations and sop_doc_id are required" });
 
+  // Basic required fields validation per visualization
+  for (const [idx, v] of visualizations.entries()) {
+    if (!v) {
+      return res.status(400).json({
+        message: `Invalid visualization payload at index ${idx}`,
+      });
+    }
+    const required = [
+      { key: "completeness", label: "Kelengkapan" },
+      { key: "time_required", label: "Waktu" },
+      { key: "output", label: "Output" },
+    ];
+    for (const r of required) {
+      const val = v[r.key];
+      if (val === undefined || val === null || String(val).trim() === "") {
+        return res.status(400).json({
+          message: `${r.label} wajib diisi (index ${idx})`,
+          field: r.key,
+          index: idx,
+        });
+      }
+    }
+  }
+
   const connection = await db.getConnection();
   await connection.beginTransaction();
   try {

@@ -45,13 +45,35 @@ exports.authenticate = async (req, res, next) => {
     try {
       const fullUserData = await User.findById(decoded.id);
       if (fullUserData) {
+        // Jika akun dinonaktifkan (termasuk format disabled:*), tolak akses
+        if (
+          typeof fullUserData.role === "string" &&
+          fullUserData.role.startsWith("disabled")
+        ) {
+          try {
+            await Auth.logout(fullUserData.email);
+          } catch (e) {}
+          // Bersihkan cookie token
+          try {
+            res.clearCookie("token", {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === "production",
+              sameSite: "strict",
+              path: "/",
+            });
+          } catch (e) {}
+          return res
+            .status(403)
+            .json({ message: "Akun dinonaktifkan. Hubungi administrator." });
+        }
         // Simpan data user lengkap ke request object
         req.user = fullUserData;
       } else {
         // Jika user tidak ditemukan di database, gunakan data dari token
         req.user = decoded;
       }
-    } catch (dbError) {// Fallback ke data dari token jika gagal akses database
+    } catch (dbError) {
+      // Fallback ke data dari token jika gagal akses database
       req.user = decoded;
     }
 
@@ -67,7 +89,7 @@ exports.authenticate = async (req, res, next) => {
           // Hapus token yang expired dari database
           await Auth.logout(decoded.email);
         }
-      } catch (e) {}
+      } catch (e) {}
 
       // Pastikan cookie token dibersihkan dari browser
       try {

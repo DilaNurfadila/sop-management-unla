@@ -469,6 +469,7 @@ const Settings = () => {
                         errors.name ? "border-red-500" : "border-gray-300"
                       }`}
                       placeholder="Masukkan nama lengkap"
+                      autoComplete="off"
                     />
                     {errors.name && (
                       <p className="text-red-500 text-sm flex items-center mt-1">
@@ -493,6 +494,7 @@ const Settings = () => {
                         errors.email ? "border-red-500" : "border-gray-300"
                       }`}
                       placeholder="nama@email.com"
+                      autoComplete="off"
                     />
                     {errors.email && (
                       <p className="text-red-500 text-sm flex items-center mt-1">
@@ -517,6 +519,7 @@ const Settings = () => {
                         errors.position ? "border-red-500" : "border-gray-300"
                       }`}
                       placeholder="Masukkan posisi/jabatan"
+                      autoComplete="off"
                     />
                     {errors.position && (
                       <p className="text-red-500 text-sm flex items-center mt-1">
@@ -614,6 +617,7 @@ const Settings = () => {
                           : "border-gray-300"
                       }`}
                       placeholder="Masukkan password saat ini"
+                      autoComplete="off"
                     />
                     <button
                       type="button"
@@ -655,6 +659,7 @@ const Settings = () => {
                           : "border-gray-300"
                       }`}
                       placeholder="Masukkan password baru"
+                      autoComplete="off"
                     />
                     <button
                       type="button"
@@ -693,6 +698,7 @@ const Settings = () => {
                           : "border-gray-300"
                       }`}
                       placeholder="Konfirmasi password baru"
+                      autoComplete="off"
                     />
                     <button
                       type="button"

@@ -20,6 +20,8 @@ const bcrypt = require("bcrypt");
 const { format } = require("date-fns");
 // Load environment variables
 require("dotenv").config();
+// Import Unit model to enrich user with unit name
+const Unit = require("../models/Unit");
 
 /**
  * Helper function untuk logging aktivitas authentication
@@ -431,6 +433,13 @@ exports.login = async (req, res) => {
       });
     }
 
+    // Blokir login jika akun dinonaktifkan (termasuk disabled:*)
+    if (typeof user.role === "string" && user.role.startsWith("disabled")) {
+      return res.status(403).json({
+        message: "Akun Anda telah dinonaktifkan. Silakan hubungi superadmin.",
+      });
+    }
+
     // Generate JWT token
     const token = generateToken({
       id: user.id,
@@ -605,6 +614,65 @@ exports.resetPassword = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Terjadi kesalahan saat reset password",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Controller untuk mendapatkan user saat ini (berdasarkan token cookie)
+ * Mengembalikan data user terenkripsi (konsisten dengan response login)
+ * serta menambahkan unit_name untuk kenyamanan frontend.
+ */
+exports.getCurrentUser = async (req, res) => {
+  try {
+    // req.user diisi oleh middleware authenticate (data paling baru dari DB jika tersedia)
+    const baseUser = req.user;
+    if (!baseUser || !baseUser.id) {
+      return res.status(401).json({ message: "Tidak terautentikasi" });
+    }
+
+    // Ambil data user terbaru dari DB untuk memastikan konsistensi
+    let user = baseUser;
+    try {
+      const fullUser = await User.findById(baseUser.id);
+      if (fullUser) {
+        user = fullUser;
+      }
+    } catch (e) {
+      // fallback ke req.user jika terjadi error DB
+      user = baseUser;
+    }
+
+    // Ambil nama unit dari tabel units (jika tersedia)
+    let unitName = null;
+    try {
+      if (user?.unit) {
+        const unitRow = await Unit.findById(user.unit);
+        unitName = unitRow?.nama_unit || null;
+      }
+    } catch (e) {
+      unitName = null;
+    }
+
+    // Enkripsi data user untuk konsistensi dengan response login
+    const encryptedUserData = {
+      id: user.id,
+      name: safeEncrypt(user.name),
+      email: safeEncrypt(user.email),
+      position: safeEncrypt(user.position),
+      unit: safeEncrypt(user.unit),
+      role: safeEncrypt(user.role),
+      // Sertakan unit_name juga (terenkripsi) agar frontend bisa mendekripsi bila perlu
+      unit_name: unitName ? safeEncrypt(unitName) : null,
+      created_at: user.created_at || null,
+      updated_at: user.updated_at || null,
+    };
+
+    return res.status(200).json({ user: encryptedUserData });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Gagal mengambil data user saat ini",
       error: error.message,
     });
   }

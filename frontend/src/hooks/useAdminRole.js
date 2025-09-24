@@ -8,7 +8,11 @@ export const useAdminRole = () => {
   const userData = getSafeUserDataNoRedirect();
 
   return {
-    isAdmin: userData?.role === "admin" || userData?.role === "admin_unit",
+    isSuperAdmin: userData?.role === "superadmin",
+    isAdmin:
+      userData?.role === "admin" ||
+      userData?.role === "admin_unit" ||
+      userData?.role === "superadmin",
     isLoading: false,
     userData: userData,
     userUnit: userData?.unit,
@@ -23,6 +27,7 @@ export const useAdminPermissions = () => {
   const { isAdmin, userData } = useAdminRole();
 
   return {
+    isSuperAdmin: userData?.role === "superadmin",
     canAssignSopCreator: isAdmin,
     canManageAssignments: isAdmin,
     canDeleteAssignments: isAdmin,

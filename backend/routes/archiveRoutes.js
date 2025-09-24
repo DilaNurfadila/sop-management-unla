@@ -7,7 +7,7 @@ const { authenticate, authorize } = require("../middlewares/authMiddleware");
 router.get(
   "/",
   authenticate,
-  authorize(["admin", "admin_unit", "user"]),
+  authorize(["superadmin", "admin", "admin_unit", "user"]),
   archiveController.getAllArchivedDocs
 );
 
@@ -15,7 +15,7 @@ router.get(
 router.post(
   "/archive-sop/:sopId",
   authenticate,
-  authorize(["admin", "admin_unit"]),
+  authorize(["superadmin", "admin", "admin_unit"]),
   archiveController.archiveSop
 );
 
@@ -23,13 +23,13 @@ router.post(
 router.get(
   "/stats",
   authenticate,
-  authorize(["admin", "admin_unit", "user"]),
+  authorize(["superadmin", "admin", "admin_unit", "user"]),
   archiveController.getArchiveStats
 );
 router.post(
   "/:id/restore",
   authenticate,
-  authorize(["admin", "admin_unit"]),
+  authorize(["superadmin", "admin", "admin_unit"]),
   archiveController.restoreSopFromArchive
 );
 

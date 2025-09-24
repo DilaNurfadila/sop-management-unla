@@ -65,13 +65,27 @@ export const updateUnit = async (id, unitData) => {
   }
 };
 
-// Hapus unit
-export const deleteUnit = async (id) => {
+// Nonaktifkan unit
+export const deactivateUnit = async (id) => {
   try {
-    const response = await api.delete(`/units/${id}`);
+    const response = await api.put(`/units/${id}/deactivate`);
     return response.data;
   } catch (error) {
-    throw new Error(error.response?.data?.message || "Gagal menghapus unit");
+    throw new Error(
+      error.response?.data?.message || "Gagal menonaktifkan unit"
+    );
+  }
+};
+
+// Aktifkan kembali unit
+export const activateUnit = async (id) => {
+  try {
+    const response = await api.put(`/units/${id}/activate`);
+    return response.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || "Gagal mengaktifkan kembali unit"
+    );
   }
 };
 

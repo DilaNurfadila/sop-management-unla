@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { formatTanggalPembuatanFromSop } from "../utils/sopDateHelpers.jsx";
 import { getSopByUserUnit, getSopByUnit } from "../services/api";
 import { getAllUnits } from "../services/unitApi";
 import { updateSopDocument } from "../services/flowchartApi";
@@ -86,18 +87,6 @@ const SOPByUnitPage = () => {
    */
   const handleUnitChange = (event) => {
     setSelectedUnit(event.target.value);
-  };
-
-  /**
-   * Function untuk format tanggal
-   */
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("id-ID", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
   };
 
   /**
@@ -248,7 +237,8 @@ const SOPByUnitPage = () => {
                         <strong>Dibuat oleh:</strong> {sop.uploader_name}
                       </p>
                       <p className="sop-date">
-                        <strong>Tanggal:</strong> {formatDate(sop.created_date)}
+                        <strong>Tanggal Pembuatan:</strong>{" "}
+                        {formatTanggalPembuatanFromSop(sop)}
                       </p>
                     </div>
 

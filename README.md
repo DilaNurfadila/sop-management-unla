@@ -20,7 +20,7 @@ This application is still under development
 
 - Forgot password
 
-- SOP Feedback [in update]
+- SOP Feedback
 
 - SOP Archive
 
@@ -28,7 +28,7 @@ This application is still under development
 
 - Manage users
 
-- Log Activity (only admin) [this feature has been temporarily suspended]
+- Log Activity (only superadmin)
 
 - Manage units
 
@@ -39,6 +39,8 @@ This application is still under development
 - Manage assignments [admin & admin unit]
 
 - My assignments [admin unit & user]
+
+- KPI Dashboard (only superadmin & admin)
 
 ## How to Install
 

@@ -107,13 +107,14 @@ class SopDoc {
       SELECT 
         d.*,
         COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
-        COALESCE(ar.approval_date, d.created_at) AS created_date,
         'Universitas Langlangbuana' AS organization,
         unit_scope_tbl.nama_unit AS unit_scope_name
       FROM sop_documents d
       LEFT JOIN sop_approval_roles ar 
         ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
       LEFT JOIN users creator ON ar.user_id = creator.id
+      LEFT JOIN sop_approval_roles approver_role 
+        ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
       LEFT JOIN units unit_scope_tbl 
         ON d.unit_scope = unit_scope_tbl.id
       WHERE 
@@ -121,18 +122,25 @@ class SopDoc {
 
     let params = [];
 
-    if (userRole === "admin" || userRole === "admin_unit") {
-      // Admin dan admin_unit dapat melihat semua dokumen
-      query += `1 = 1`;
+    if (
+      userRole === "admin" ||
+      userRole === "admin_unit" ||
+      userRole === "superadmin"
+    ) {
+      // Admin, admin_unit, dan superadmin dapat melihat semua dokumen kecuali yang diarsipkan (arsip ada endpoint terpisah)
+      query += `d.status <> 'archived'`;
     } else {
       // User biasa hanya dapat melihat:
-      // 1. Draft documents yang mereka buat sendiri
-      // 2. HANYA Published documents dari siapapun (bukan unpublished/approved)
+      // 1. Draft & Unpublished documents yang mereka buat sendiri (agar tidak hilang ketika sudah disubmit / approved sebelum publish)
+      // 2. Published documents dari siapapun
+      // (Tetap sembunyikan archived)
       query += `
-        (d.status = 'draft' AND ar.user_id = ?) OR
-        (d.status = 'published')
+        (
+          (d.status IN ('draft','unpublished') AND ar.user_id = ?)
+          OR d.status = 'published'
+        ) AND d.status <> 'archived'
       `;
-      params.push(userId);
+      params.push(userId); // untuk ar.user_id = ?
     }
 
     query += ` ORDER BY d.created_at DESC`;
@@ -150,13 +158,14 @@ class SopDoc {
       SELECT 
         d.*,
         COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
-        COALESCE(ar.approval_date, d.created_at) AS created_date,
         'Universitas Langlangbuana' AS organization,
         unit_scope_tbl.nama_unit AS unit_scope_name
       FROM sop_documents d
       LEFT JOIN sop_approval_roles ar 
         ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
       LEFT JOIN users creator ON ar.user_id = creator.id
+      LEFT JOIN sop_approval_roles approver_role 
+        ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
       LEFT JOIN units unit_scope_tbl 
         ON d.unit_scope = unit_scope_tbl.id
       ORDER BY d.created_at DESC
@@ -174,12 +183,13 @@ class SopDoc {
         d.id, 
         d.title, 
         creator.name AS creator, 
-        ar.approval_date AS created_date
+        d.approval_date
       FROM sop_documents d
       LEFT JOIN sop_approval_roles ar 
-        ON d.id = ar.sop_doc_id 
-        AND ar.role = 'Creator'
+        ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
       LEFT JOIN users creator ON ar.user_id = creator.id
+      LEFT JOIN sop_approval_roles approver_role 
+        ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
       ORDER BY d.created_at DESC
     `);
     return rows;
@@ -193,13 +203,15 @@ class SopDoc {
     const [rows] = await pool.query(`
       SELECT 
         d.*,
+        d.public_visibility,
         COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
-        COALESCE(ar.approval_date, d.created_at) AS created_date,
         unit_scope_tbl.nama_unit AS unit_scope_name
       FROM sop_documents d
       LEFT JOIN sop_approval_roles ar 
         ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
       LEFT JOIN users creator ON ar.user_id = creator.id
+      LEFT JOIN sop_approval_roles approver_role 
+        ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
       LEFT JOIN units unit_scope_tbl 
         ON d.unit_scope = unit_scope_tbl.id
       WHERE d.status = 'published' 
@@ -218,15 +230,14 @@ class SopDoc {
       `SELECT 
         d.*,
         COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
-        approver_role.approval_date AS creation_date,
-        d.sop_applicable AS effective_date,
-        d.revision_date,
-        COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+        d.approval_date,
         u.nama_unit AS unit_name,
         u.kode_unit AS unit_code,
         'Universitas Langlangbuana' AS organization,
         d.unit_scope,
         unit_scope_tbl.nama_unit AS unit_scope_name,
+        d.public_visibility,
+        ar.user_id AS creator_id,
         reviewer.id AS reviewer_id,
         reviewer.name AS reviewer_name,
         approver.id AS approver_id,
@@ -234,7 +245,7 @@ class SopDoc {
         approver.position AS approver_position,
         d.qr_checksum,
         d.approved_by,
-        d.approval_date
+        d.approval_date AS approval_date
       FROM sop_documents d
       LEFT JOIN sop_approval_roles ar 
         ON d.id = ar.sop_doc_id AND ar.role = 'Creator'
@@ -672,7 +683,10 @@ class SopDoc {
         setClauses.push("revision_type = ?");
         params.push(revisionType);
       }
-      setClauses.push("revision_date = NOW()");
+      // Set tanggal revisi hanya ketika membuat revisi minor/major pada SOP yang sudah disahkan
+      if (version_type === "minor" || version_type === "major") {
+        setClauses.push("revision_date = NOW()");
+      }
 
       const updateQuery = `UPDATE sop_documents SET ${setClauses.join(
         ", "
@@ -848,14 +862,12 @@ class SopDoc {
             d.updated_at,
             d.sop_applicable,
             d.approval_date,
+            d.public_visibility,
             creator.name AS uploader_name,
             ar.user_id AS uploader_id,
             ar.user_id AS creator_id,
             NULL AS assignment_id, -- Untuk kompatibilitas dengan assignment system
-            approver_role.approval_date AS creation_date,
-            d.sop_applicable AS effective_date,
             d.revision_date,
-            COALESCE(approver_role.approval_date, d.created_at) AS created_date,
             u.kode_unit,
             u.nomor_unit
           FROM sop_documents d
@@ -894,14 +906,12 @@ class SopDoc {
             d.updated_at,
             d.sop_applicable,
             d.approval_date,
+            d.public_visibility,
             creator.name AS uploader_name,
             ar.user_id AS uploader_id,
             ar.user_id AS creator_id,
             NULL AS assignment_id, -- Untuk kompatibilitas dengan assignment system
-            approver_role.approval_date AS creation_date,
-            d.sop_applicable AS effective_date,
             d.revision_date,
-            COALESCE(approver_role.approval_date, d.created_at) AS created_date,
             u.kode_unit,
             u.nomor_unit
           FROM sop_documents d
@@ -912,10 +922,14 @@ class SopDoc {
           LEFT JOIN units unit_scope_tbl ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope_tbl.id
           LEFT JOIN sop_approval_roles reviewer_role ON d.id = reviewer_role.sop_doc_id AND reviewer_role.role = 'Reviewer'
           LEFT JOIN sop_approval_roles approver_role ON d.id = approver_role.sop_doc_id AND approver_role.role = 'Approver'
-          WHERE COALESCE(d.unit_scope, sca.unit_scope) = ?
+          WHERE (
+            COALESCE(d.unit_scope, sca.unit_scope) = ?
+            OR ar.user_id = ? -- admin_unit sebagai creator tetap melihat dokumen sendiri meskipun unit_scope berbeda
+          )
+          AND d.status <> 'archived'
           ORDER BY d.created_at DESC
         `,
-          [userUnit]
+          [userUnit, userId]
         );
         return rows;
       }
@@ -940,14 +954,12 @@ class SopDoc {
           d.updated_at,
           d.sop_applicable,
           d.approval_date,
+          d.public_visibility,
           COALESCE(creator.name, 'Unknown Creator') AS uploader_name,
           ar.user_id AS uploader_id,
           ar.user_id AS creator_id,
           NULL AS assignment_id, -- Untuk kompatibilitas dengan assignment system
-          approver_role.approval_date AS creation_date,
-          d.sop_applicable AS effective_date,
-            d.revision_date,
-          COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+          d.revision_date,
           u.kode_unit,
           u.nomor_unit
         FROM sop_documents d
@@ -1001,10 +1013,8 @@ class SopDoc {
           d.updated_at,
           d.sop_applicable,
           creator.name AS uploader_name,
-          approver_role.approval_date AS creation_date,
-          d.sop_applicable AS effective_date,
-            d.revision_date,
-          COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+          d.approval_date,
+          d.revision_date,
           u.nama_unit AS organization,
           u.kode_unit,
           u.nomor_unit
@@ -1055,15 +1065,8 @@ class SopDoc {
           d.updated_at,
           d.sop_applicable,
           creator.name AS uploader_name,
-          -- Tanggal Pembuatan: Kapan disahkan oleh Approver
-          approver_role.approval_date AS creation_date,
-          -- Tanggal Efektif: Dari kolom sop_applicable (diatur oleh pengesah)
-          d.sop_applicable AS effective_date,
-          -- Tanggal Revisi: Hanya tampilkan jika ada permintaan revisi yang selesai
-            -- FIXME: Logic lama salah, ganti dengan NULL sampai ada sistem revisi proper
-            d.revision_date,
-          -- Fallback untuk kompatibilitas (gunakan creation_date sebagai created_date)
-          COALESCE(approver_role.approval_date, d.created_at) AS created_date,
+          d.approval_date,
+          d.revision_date,
           u.nama_unit AS organization,
           u.kode_unit,
           u.nomor_unit,

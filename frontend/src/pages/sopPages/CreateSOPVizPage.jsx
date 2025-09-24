@@ -46,6 +46,7 @@ function CreateSOPVizPage() {
               placeholder="Masukkan nama SOP"
               required
               disabled={loading}
+              autoComplete="off"
             />
           </div>
 

@@ -13,14 +13,23 @@ const createUpdateValidation = [
     .isInt()
     .withMessage("Return activity must be integer"),
   body("completeness")
-    .optional()
     .isString()
-    .withMessage("Kelengkapan must be string"),
+    .withMessage("Kelengkapan must be string")
+    .bail()
+    .notEmpty()
+    .withMessage("Kelengkapan wajib diisi"),
   body("time_required")
-    .optional()
     .isString()
-    .withMessage("Waktu must be string"),
-  body("output").optional().isString().withMessage("Output must be string"),
+    .withMessage("Waktu must be string")
+    .bail()
+    .notEmpty()
+    .withMessage("Waktu wajib diisi"),
+  body("output")
+    .isString()
+    .withMessage("Output must be string")
+    .bail()
+    .notEmpty()
+    .withMessage("Output wajib diisi"),
   body("notes").optional().isString().withMessage("Notes must be string"),
 ];
 

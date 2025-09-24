@@ -1,184 +1,252 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   getUsersByAdminUnit,
   assignSopCreator,
   getAdminUsers,
-  // getApprovedSopsByAdminUnit, // Dinonaktifkan sementara
 } from "../../services/sopCreatorApi";
 import { getAllUnits } from "../../services/unitApi";
-// import { getSopDocuments } from "../../services/flowchartApi"; // Dinonaktifkan sementara
 import Notification from "../../components/Notification";
 import { useAdminPermissions } from "../../hooks/useAdminRole";
 import { getSafeUserDataNoRedirect } from "../../utils/cryptoUtils";
 
+// Reusable dropdown with internal search
+const SearchableDropdown = ({
+  value,
+  onChange,
+  options,
+  placeholder = "Pilih...",
+  disabled = false,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const selected = options.find((o) => String(o.value) === String(value));
+  const display = selected ? selected.label : placeholder;
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? options.filter(
+        (o) =>
+          (o.label || "").toLowerCase().includes(q) ||
+          (o.search || "").toLowerCase().includes(q)
+      )
+    : options;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        className={`w-full flex justify-between items-center px-3 py-2 border rounded-md shadow-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+          disabled ? "opacity-60 cursor-not-allowed" : ""
+        }`}>
+        <span
+          className={`text-left ${
+            selected ? "text-gray-900" : "text-gray-500"
+          }`}>
+          {display}
+        </span>
+        <svg
+          className={`h-4 w-4 ml-2 transform transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow-lg">
+          <div className="p-2 border-b">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari..."
+              autoFocus
+              className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <ul className="max-h-56 overflow-auto py-1">
+            {filtered.length === 0 && (
+              <li className="px-3 py-2 text-sm text-gray-500">
+                Tidak ada hasil
+              </li>
+            )}
+            {filtered.map((opt) => (
+              <li key={opt.value}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${
+                    String(value) === String(opt.value) ? "bg-blue-50" : ""
+                  }`}>
+                  <div className="text-gray-900">{opt.label}</div>
+                  {opt.meta && (
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {opt.meta}
+                    </div>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AssignSopCreatorPage = () => {
-  // Admin permissions check
   const { canAssignSopCreator, userRole } = useAdminPermissions();
 
-  // State untuk data
+  // Data state
   const [users, setUsers] = useState([]);
-  const [adminUsers, setAdminUsers] = useState([]); // Admin users untuk pemeriksa dan pengesah
-  const [units, setUnits] = useState([]); // Units untuk ruang lingkup unit kerja
-  // const [sopDocuments, setSopDocuments] = useState([]); // Dinonaktifkan sementara
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // State untuk form
+  // Form state
   const [formData, setFormData] = useState({
     assigned_to: "",
-    task_type: "create", // Default ke "create", revisi dinonaktifkan sementara
-    sop_to_revise: "", // ID SOP yang akan direvisi (jika task_type = revise)
-    reviewer_id: "", // ID Pemeriksa (wajib)
-    approver_id: "", // ID Pengesah (wajib)
-    unit_scope: "", // ID Unit untuk ruang lingkup unit kerja (wajib)
+    task_type: "create",
+    sop_to_revise: "",
+    reviewer_id: "",
+    approver_id: "",
+    unit_scope: "",
     notes: "",
     due_date: "",
   });
 
-  // State untuk notification
+  // Helper: local today string (YYYY-MM-DD) respecting timezone
+  const todayStr = (() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  })();
+
+  // Notification state
   const [notification, setNotification] = useState({
     show: false,
     message: "",
     type: "success",
   });
 
-  /**
-   * Mengambil daftar pengguna dalam unit yang sama dengan admin
-   */
+  // Loaders
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await getUsersByAdminUnit();
-      setUsers(response.data);
-    } catch (error) {
-      console.error("❌ Error loading users:", error);
+      const res = await getUsersByAdminUnit();
+      setUsers(res.data);
+    } catch (e) {
+      console.error("❌ loadUsers error", e);
       showNotification("Gagal memuat daftar pengguna", "error");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  /**
-   * Mengambil daftar admin users untuk pemeriksa dan pengesah
-   */
   const loadAdminUsers = useCallback(async () => {
     try {
-      const response = await getAdminUsers();
-      setAdminUsers(response.data);
-    } catch (error) {
-      console.error("❌ Error loading admin users:", error);
-      showNotification("Gagal memuat daftar admin users", "error");
+      const res = await getAdminUsers();
+      setAdminUsers(res.data);
+    } catch (e) {
+      console.error("❌ loadAdminUsers error", e);
+      showNotification("Gagal memuat admin users", "error");
     }
   }, []);
 
-  /**
-   * Mengambil daftar units untuk ruang lingkup unit kerja
-   */
   const loadUnits = useCallback(async () => {
     try {
-      const response = await getAllUnits();
-      const unitsArray = response.units || [];
-      setUnits(unitsArray);
-    } catch (error) {
-      console.error("❌ Error loading units:", error);
-      showNotification("Gagal memuat daftar unit kerja", "error");
+      const res = await getAllUnits();
+      setUnits(res.units || []);
+    } catch (e) {
+      console.error("❌ loadUnits error", e);
+      showNotification("Gagal memuat unit", "error");
     }
   }, []);
 
-  /**
-   * Mengambil daftar SOP documents yang bisa direvisi
-   * NOTE: Dinonaktifkan sementara karena fitur revisi dimatikan
-   */
-  // const loadSopDocuments = useCallback(async () => {
-  //   try {
-  //     // Gunakan endpoint yang sesuai berdasarkan role
-  //     let response;
-  //     if (userRole === "admin_unit") {
-  //       // Admin unit: hanya SOP dari unit mereka yang sudah approved
-  //       response = await getApprovedSopsByAdminUnit();
-  //     } else {
-  //       // Admin: semua SOP yang sudah approved
-  //       const allSops = await getSopDocuments();
-  //       const dataArray = Array.isArray(allSops) ? allSops : allSops.data || [];
-  //       response = dataArray.filter((doc) => doc.review_status === "approved");
-  //     }
-
-  //     // Pastikan response adalah array
-  //     const dataArray = Array.isArray(response)
-  //       ? response
-  //       : response.data || [];
-
-  //     // Filter SOP yang sudah disahkan (review_status = 'approved')
-  //     let availableSops = dataArray.filter((doc) => {
-  //       return doc.review_status === "approved";
-  //     });
-
-  //     setSopDocuments(availableSops);
-  //   } catch (error) {
-  //     console.error("❌ Error loading SOP documents:", error);
-  //     showNotification("Gagal memuat daftar SOP", "error");
-  //   }
-  // }, [userRole]);
-
-  // Load users saat komponen dimount (SOP documents dinonaktifkan sementara)
   useEffect(() => {
     if (canAssignSopCreator) {
       loadUsers();
       loadAdminUsers();
       loadUnits();
-      // loadSopDocuments(); // Dinonaktifkan sementara karena fitur revisi dimatikan
     }
-  }, [canAssignSopCreator, userRole, loadUsers, loadAdminUsers, loadUnits]);
+  }, [canAssignSopCreator, loadUsers, loadAdminUsers, loadUnits]);
 
-  // Auto-select unit untuk admin_unit
+  // Auto-select unit for admin_unit
   useEffect(() => {
     if (userRole === "admin_unit") {
-      // Untuk admin_unit, auto-select unit mereka sendiri
-      // Ambil informasi user dari utilitas crypto
-      const userData = getSafeUserDataNoRedirect();
-      if (userData && userData.unit) {
-        setFormData((prev) => ({
-          ...prev,
-          unit_scope: userData.unit.toString(),
-        }));
+      const u = getSafeUserDataNoRedirect();
+      if (u?.unit) {
+        setFormData((prev) => ({ ...prev, unit_scope: String(u.unit) }));
       }
     }
   }, [userRole]);
 
-  /**
-   * Handle perubahan input form
-   */
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-      // Reset sop_to_revise jika task_type berubah ke create
       ...(name === "task_type" && value === "create" && { sop_to_revise: "" }),
     }));
   };
 
-  /**
-   * Handle submit form penugasan
-   */
+  const showNotification = (message, type = "success") => {
+    setNotification({ show: true, message, type });
+  };
+  const closeNotification = () =>
+    setNotification((prev) => ({ ...prev, show: false }));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validasi form
     if (
       !formData.assigned_to ||
       !formData.notes ||
       !formData.task_type ||
       !formData.reviewer_id ||
       !formData.approver_id ||
-      !formData.unit_scope
+      !formData.unit_scope ||
+      !formData.due_date
     ) {
       showNotification("Harap lengkapi semua field yang wajib diisi", "error");
       return;
     }
 
-    // Validasi penyusun tidak boleh sama dengan pemeriksa atau pengesah
+    // Cegah tanggal masa lalu
+    if (formData.due_date < todayStr) {
+      showNotification(
+        "Tanggal jatuh tempo tidak boleh tanggal yang sudah berlalu",
+        "error"
+      );
+      return;
+    }
+
     if (
       formData.assigned_to === formData.reviewer_id ||
       formData.assigned_to === formData.approver_id
@@ -190,7 +258,6 @@ const AssignSopCreatorPage = () => {
       return;
     }
 
-    // Validasi khusus untuk revisi
     if (formData.task_type === "revise" && !formData.sop_to_revise) {
       showNotification("Harap pilih SOP yang akan direvisi", "error");
       return;
@@ -198,52 +265,29 @@ const AssignSopCreatorPage = () => {
 
     try {
       setSubmitting(true);
-
-      // Kirim data penugasan
       await assignSopCreator(formData);
-
-      // Tampilkan notifikasi success
       showNotification("Penugasan berhasil dibuat!", "success");
-
-      // Reset form
       setFormData({
         assigned_to: "",
-        task_type: "create", // Reset ke default
+        task_type: "create",
         sop_to_revise: "",
         reviewer_id: "",
         approver_id: "",
+        unit_scope: userRole === "admin_unit" ? formData.unit_scope : "",
         notes: "",
         due_date: "",
       });
-    } catch (error) {
-      console.error("❌ Error creating assignment:", error);
-      const errorMessage =
-        error.response?.data?.message || "Gagal membuat penugasan";
-      showNotification(errorMessage, "error");
+    } catch (e) {
+      console.error("❌ create assignment error", e);
+      showNotification(
+        e.response?.data?.message || "Gagal membuat penugasan",
+        "error"
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  /**
-   * Menampilkan notification
-   */
-  const showNotification = (message, type = "success") => {
-    setNotification({
-      show: true,
-      message,
-      type,
-    });
-  };
-
-  /**
-   * Menutup notification
-   */
-  const closeNotification = () => {
-    setNotification((prev) => ({ ...prev, show: false }));
-  };
-
-  // Admin access guard
   if (!canAssignSopCreator) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
@@ -265,10 +309,81 @@ const AssignSopCreatorPage = () => {
     );
   }
 
+  // Option builders
+  const assignedOptions = users
+    .filter((u) => u.role !== "superadmin")
+    .map((u) => {
+      const unitLabel =
+        u.unit_name || u.nama_unit || u.unit || "Unit tidak tersedia";
+      const pos = u.position || u.jabatan || "(Posisi tidak ada)";
+      return {
+        value: u.id,
+        label: u.name, // hanya nama utama
+        search: `${u.name || ""} ${unitLabel} ${pos}`,
+        meta: `${unitLabel} • ${pos}`,
+      };
+    });
+
+  const baseUsers = users
+    .filter((u) => u.role !== "superadmin")
+    .map((u) => {
+      const unitLabel =
+        u.unit_name || u.nama_unit || u.unit || "Unit tidak tersedia";
+      const pos = u.position || u.jabatan || "(Posisi tidak ada)";
+      return {
+        value: u.id,
+        label: u.name,
+        search: `${u.name || ""} ${unitLabel} ${pos}`,
+        meta: `${unitLabel} • ${pos}`,
+      };
+    });
+
+  const baseAdmins = adminUsers
+    .filter((u) => u.role !== "superadmin")
+    .map((u) => {
+      const unitLabel =
+        u.unit_name || u.nama_unit || u.unit || "Unit tidak tersedia";
+      const pos = u.position || u.jabatan || "(Posisi tidak ada)";
+      return {
+        value: u.id,
+        label: u.name,
+        search: `${u.name || ""} ${unitLabel} ${pos}`,
+        meta: `${unitLabel} • ${pos}`,
+      };
+    });
+
+  const reviewerOptions = [
+    { value: "", label: "-- Pilih Pemeriksa --" },
+    ...baseUsers,
+    ...baseAdmins,
+  ];
+  const approverOptions = [
+    { value: "", label: "-- Pilih Pengesah --" },
+    ...baseUsers,
+    ...baseAdmins,
+  ];
+
+  const unitOptions = [
+    {
+      value: "",
+      label:
+        userRole === "admin_unit"
+          ? "Unit kerja telah ditentukan"
+          : "-- Pilih Unit Kerja --",
+      search: "",
+      meta: "",
+    },
+    ...units.map((u) => ({
+      value: u.id,
+      label: u.nama_unit || u.unit_name || "(Tanpa Nama)",
+      search: `${u.nama_unit || ""} ${u.kode_unit || ""}`,
+      meta: u.kode_unit || "",
+    })),
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
@@ -280,10 +395,8 @@ const AssignSopCreatorPage = () => {
               </p>
             </div>
             <div className="bg-blue-50 px-4 py-2 rounded-lg">
-              <p className="text-sm text-blue-700">
-                <span className="font-medium">
-                  {userRole === "admin" ? "� Admin Penuh" : "�👤 Admin Unit"}
-                </span>
+              <p className="text-sm text-blue-700 font-medium">
+                {userRole === "admin" ? "👑 Admin Penuh" : "👤 Admin Unit"}
               </p>
               <p className="text-xs text-blue-600">
                 {userRole === "admin"
@@ -294,7 +407,6 @@ const AssignSopCreatorPage = () => {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="bg-white shadow-sm rounded-lg">
           <div className="px-6 py-8">
             {loading ? (
@@ -321,78 +433,36 @@ const AssignSopCreatorPage = () => {
                     required
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                     <option value="create">Membuat SOP Baru</option>
-                    {/* <option value="revise">Merevisi SOP Existing</option> */}
                   </select>
                   <p className="mt-1 text-sm text-gray-500">
-                    Saat ini hanya tersedia tugas pembuatan SOP baru. Fitur
-                    revisi sedang dalam pengembangan.
+                    Saat ini hanya tersedia tugas pembuatan SOP baru.
                   </p>
                 </div>
 
-                {/* SOP yang akan direvisi - FITUR DINONAKTIFKAN SEMENTARA */}
-                {/* formData.task_type === "revise" && (
-                  <div>
-                    <label
-                      htmlFor="sop_to_revise"
-                      className="block text-sm font-medium text-gray-700 mb-2">
-                      SOP yang sudah disahkan untuk direvisi{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      id="sop_to_revise"
-                      name="sop_to_revise"
-                      value={formData.sop_to_revise}
-                      onChange={handleInputChange}
-                      required={formData.task_type === "revise"}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                      <option value="">
-                        -- Pilih SOP yang sudah disahkan --
-                      </option>
-                      {sopDocuments.map((doc) => (
-                        <option key={doc.id} value={doc.id}>
-                          {doc.title} - {doc.sop_code || "No Code"} (Unit:{" "}
-                          {doc.unit_scope_name || "N/A"})
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Total {sopDocuments.length} SOP yang sudah disahkan
-                      tersedia untuk direvisi
-                    </p>
-                  </div>
-                )}
-
-                {/* Pilih Penyusun */}
+                {/* Penyusun */}
                 <div>
                   <label
                     htmlFor="assigned_to"
                     className="block text-sm font-medium text-gray-700 mb-2">
                     Penyusun <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    id="assigned_to"
-                    name="assigned_to"
+                  <SearchableDropdown
                     value={formData.assigned_to}
-                    onChange={handleInputChange}
-                    required
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">-- Pilih Penyusun --</option>
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {userRole === "admin"
-                          ? `${user.name} (Unit: ${
-                              user.unit_name || user.unit || "Tidak ada unit"
-                            })`
-                          : user.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) =>
+                      setFormData((p) => ({ ...p, assigned_to: val }))
+                    }
+                    options={[
+                      { value: "", label: "-- Pilih Penyusun --" },
+                      ...assignedOptions,
+                    ]}
+                    placeholder="-- Pilih Penyusun --"
+                  />
                   <p className="mt-1 text-sm text-gray-500">
                     Pilih pengguna yang akan menyusun SOP
                   </p>
                 </div>
 
-                {/* Ruang Lingkup Unit Kerja */}
+                {/* Unit Scope */}
                 <div>
                   <label
                     htmlFor="unit_scope"
@@ -401,134 +471,76 @@ const AssignSopCreatorPage = () => {
                     <span className="text-red-500">*</span>
                     {userRole === "admin_unit" && (
                       <span className="text-sm text-blue-600 font-normal ml-2">
-                        (Otomatis dipilih sesuai unit Anda)
+                        (Otomatis sesuai unit Anda)
                       </span>
                     )}
                   </label>
-                  <select
-                    id="unit_scope"
-                    name="unit_scope"
+                  <SearchableDropdown
                     value={formData.unit_scope}
-                    onChange={handleInputChange}
+                    onChange={(val) =>
+                      setFormData((p) => ({ ...p, unit_scope: val }))
+                    }
+                    options={unitOptions}
+                    placeholder="-- Pilih Unit Kerja --"
                     disabled={userRole === "admin_unit"}
-                    required
-                    className={`block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-                      userRole === "admin_unit"
-                        ? "bg-gray-100 cursor-not-allowed"
-                        : ""
-                    }`}>
-                    <option value="">
-                      {userRole === "admin_unit"
-                        ? "Unit kerja telah ditentukan"
-                        : "-- Pilih Unit Kerja --"}
-                    </option>
-                    {Array.isArray(units) &&
-                      units.map((unit) => (
-                        <option key={unit.id} value={unit.id}>
-                          {unit.nama_unit}
-                          {userRole === "admin_unit" &&
-                            unit.id == formData.unit_scope &&
-                            " (Unit Anda)"}
-                        </option>
-                      ))}
-                  </select>
+                  />
                   <p className="mt-1 text-sm text-gray-500">
-                    {userRole === "admin_unit"
-                      ? "SOP akan dibuat untuk unit kerja Anda"
-                      : "Pilih unit kerja yang akan menjadi ruang lingkup SOP ini"}
+                    Pilih ruang lingkup unit kerja
                   </p>
                 </div>
 
-                {/* Pilih Pemeriksa */}
+                {/* Reviewer */}
                 <div>
                   <label
                     htmlFor="reviewer_id"
                     className="block text-sm font-medium text-gray-700 mb-2">
                     Pemeriksa <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    id="reviewer_id"
-                    name="reviewer_id"
+                  <SearchableDropdown
                     value={formData.reviewer_id}
-                    onChange={handleInputChange}
-                    required
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">-- Pilih Pemeriksa --</option>
-                    {/* User biasa */}
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {userRole === "admin"
-                          ? `${user.name} (User - ${
-                              user.unit_name || user.unit || "Tidak ada unit"
-                            })`
-                          : user.name}
-                      </option>
-                    ))}
-                    {/* Admin users */}
-                    {adminUsers.map((user) => (
-                      <option key={`admin-${user.id}`} value={user.id}>
-                        {userRole === "admin"
-                          ? `${user.name} (${
-                              user.role === "admin" ? "Admin" : "Admin Unit"
-                            } - ${user.unit_name || "Tidak ada unit"})`
-                          : user.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) =>
+                      setFormData((p) => ({ ...p, reviewer_id: val }))
+                    }
+                    options={reviewerOptions}
+                    placeholder="-- Pilih Pemeriksa --"
+                  />
                   <p className="mt-1 text-sm text-gray-500">
-                    Pilih pengguna yang akan memeriksa SOP ({users.length} user
-                    + {adminUsers.length} admin tersedia)
+                    Pilih pengguna yang akan memeriksa SOP (
+                    {users.filter((u) => u.role !== "superadmin").length} user +{" "}
+                    {adminUsers.filter((u) => u.role !== "superadmin").length}{" "}
+                    admin)
                   </p>
                 </div>
 
-                {/* Pilih Pengesah */}
+                {/* Approver */}
                 <div>
                   <label
                     htmlFor="approver_id"
                     className="block text-sm font-medium text-gray-700 mb-2">
                     Pengesah <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    id="approver_id"
-                    name="approver_id"
+                  <SearchableDropdown
                     value={formData.approver_id}
-                    onChange={handleInputChange}
-                    required
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">-- Pilih Pengesah --</option>
-                    {/* User biasa */}
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {userRole === "admin"
-                          ? `${user.name} (User - ${
-                              user.unit_name || user.unit || "Tidak ada unit"
-                            })`
-                          : user.name}
-                      </option>
-                    ))}
-                    {/* Admin users */}
-                    {adminUsers.map((user) => (
-                      <option key={`admin-${user.id}`} value={user.id}>
-                        {userRole === "admin"
-                          ? `${user.name} (${
-                              user.role === "admin" ? "Admin" : "Admin Unit"
-                            } - ${user.unit_name || "Tidak ada unit"})`
-                          : user.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) =>
+                      setFormData((p) => ({ ...p, approver_id: val }))
+                    }
+                    options={approverOptions}
+                    placeholder="-- Pilih Pengesah --"
+                  />
                   <p className="mt-1 text-sm text-gray-500">
-                    Pilih pengguna yang akan mengesahkan SOP ({users.length}{" "}
-                    user + {adminUsers.length} admin tersedia)
+                    Pilih pengguna yang akan mengesahkan SOP (
+                    {users.filter((u) => u.role !== "superadmin").length} user +{" "}
+                    {adminUsers.filter((u) => u.role !== "superadmin").length}{" "}
+                    admin)
                   </p>
                 </div>
 
-                {/* Catatan Tugas */}
+                {/* Notes */}
                 <div>
                   <label
                     htmlFor="notes"
                     className="block text-sm font-medium text-gray-700 mb-2">
-                    Catatan Tugas <span className="text-red-500">*</span>
+                    Catatan Penugasan <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     id="notes"
@@ -537,23 +549,20 @@ const AssignSopCreatorPage = () => {
                     onChange={handleInputChange}
                     rows={4}
                     required
-                    placeholder={
-                      formData.task_type === "create"
-                        ? "Jelaskan detail SOP baru yang akan dibuat: topik, tujuan, scope, deadline, dan panduan khusus lainnya..."
-                        : formData.task_type === "revise"
-                        ? "Jelaskan bagian mana yang perlu direvisi: perubahan proses, update informasi, perbaikan format, atau hal lain yang perlu diperbaiki..."
-                        : "Pilih jenis tugas terlebih dahulu untuk melihat panduan catatan yang sesuai..."
-                    }
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Tuliskan instruksi atau ruang lingkup"
                   />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Catatan ini terlihat oleh penyusun.
+                  </p>
                 </div>
 
-                {/* Tanggal Deadline */}
+                {/* Due Date (wajib) */}
                 <div>
                   <label
                     htmlFor="due_date"
                     className="block text-sm font-medium text-gray-700 mb-2">
-                    Tanggal Deadline
+                    Tanggal Batas Waktu <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -561,102 +570,98 @@ const AssignSopCreatorPage = () => {
                     name="due_date"
                     value={formData.due_date}
                     onChange={handleInputChange}
+                    min={todayStr}
+                    required
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
                   <p className="mt-1 text-sm text-gray-500">
-                    Opsional: Tentukan deadline untuk penyelesaian SOP
+                    Pilih tanggal batas waktu pengerjaan SOP.
                   </p>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                {/* Actions */}
+                <div className="pt-4 flex justify-end gap-3">
                   <button
                     type="button"
                     onClick={() =>
-                      setFormData({
+                      setFormData((prev) => ({
                         assigned_to: "",
-                        task_type: "",
+                        task_type: "create",
                         sop_to_revise: "",
+                        reviewer_id: "",
+                        approver_id: "",
+                        unit_scope:
+                          userRole === "admin_unit" ? prev.unit_scope : "",
                         notes: "",
                         due_date: "",
-                      })
+                      }))
                     }
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    disabled={submitting}>
-                    Reset Form
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                    Batalkan
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-6 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {submitting ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white inline-block mr-2"></div>
-                        Membuat Penugasan...
-                      </>
-                    ) : (
-                      "Buat Penugasan"
-                    )}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60">
+                    {submitting ? "Menyimpan..." : "Buat Penugasan"}
                   </button>
                 </div>
               </form>
             )}
           </div>
+
+          {/* Info Cards */}
+          <div className="px-6 pb-8">
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-blue-50 rounded-lg p-6">
+                <h3 className="text-lg font-medium text-blue-900 mb-2">
+                  💡 Tips Penugasan
+                </h3>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>
+                    • <strong>Untuk SOP Baru:</strong> Jelaskan topik dan
+                    tujuan.
+                  </li>
+                  <li>
+                    • <strong>Untuk Revisi:</strong> Hanya SOP disahkan yang
+                    bisa direvisi.
+                  </li>
+                  <li>• Jelaskan bagian yang perlu diperbaiki.</li>
+                  <li>• Tentukan deadline realistis.</li>
+                  <li>• Komunikasikan ekspektasi jelas.</li>
+                </ul>
+              </div>
+              <div className="bg-green-50 rounded-lg p-6">
+                <h3 className="text-lg font-medium text-green-900 mb-2">
+                  📋 Status Penugasan
+                </h3>
+                <ul className="text-sm text-green-700 space-y-1">
+                  <li>
+                    • <strong>Pending:</strong> Menunggu respons
+                  </li>
+                  <li>
+                    • <strong>Accepted:</strong> Diterima
+                  </li>
+                  <li>
+                    • <strong>In Progress:</strong> Dikerjakan
+                  </li>
+                  <li>
+                    • <strong>Completed:</strong> Selesai
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Info Cards */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-blue-50 rounded-lg p-6">
-            <h3 className="text-lg font-medium text-blue-900 mb-2">
-              💡 Tips Penugasan
-            </h3>
-            <ul className="text-sm text-blue-700 space-y-1">
-              <li>
-                • <strong>Untuk SOP Baru:</strong> Jelaskan topik, tujuan, dan
-                scope yang diinginkan
-              </li>
-              <li>
-                • <strong>Untuk Revisi:</strong> Hanya SOP yang sudah disahkan
-                (approved) yang bisa direvisi
-              </li>
-              <li>
-                • Jelaskan bagian mana yang perlu diperbaiki secara spesifik
-              </li>
-              <li>• Tentukan deadline yang realistis untuk penyelesaian</li>
-              <li>• Komunikasikan ekspektasi dan panduan dengan jelas</li>
-            </ul>
-          </div>
-
-          <div className="bg-green-50 rounded-lg p-6">
-            <h3 className="text-lg font-medium text-green-900 mb-2">
-              📋 Status Penugasan
-            </h3>
-            <ul className="text-sm text-green-700 space-y-1">
-              <li>
-                • <strong>Pending:</strong> Menunggu respons
-              </li>
-              <li>
-                • <strong>Accepted:</strong> Diterima dan akan dikerjakan
-              </li>
-              <li>
-                • <strong>In Progress:</strong> Sedang dalam pengerjaan
-              </li>
-              <li>
-                • <strong>Completed:</strong> Sudah selesai
-              </li>
-            </ul>
-          </div>
-        </div>
+        {notification.show && (
+          <Notification
+            message={notification.message}
+            type={notification.type}
+            onClose={closeNotification}
+          />
+        )}
       </div>
-
-      {/* Notification */}
-      {notification.show && (
-        <Notification
-          message={notification.message}
-          type={notification.type}
-          onClose={closeNotification}
-        />
-      )}
     </div>
   );
 };

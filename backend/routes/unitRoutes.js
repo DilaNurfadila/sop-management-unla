@@ -13,7 +13,7 @@ router.get("/public", unitController.getAllUnitsPublic);
 router.get(
   "/stats",
   authenticate,
-  authorize(["admin"]),
+  authorize(["superadmin", "admin"]),
   unitController.getUnitStats
 );
 
@@ -24,22 +24,36 @@ router.get("/search", authenticate, unitController.searchUnits);
 router.get("/:id", authenticate, unitController.getUnitById);
 
 // POST /api/units - Buat unit baru (admin only)
-router.post("/", authenticate, authorize(["admin"]), unitController.createUnit);
+router.post(
+  "/",
+  authenticate,
+  authorize(["superadmin", "admin"]),
+  unitController.createUnit
+);
 
 // PUT /api/units/:id - Update unit (admin only)
 router.put(
   "/:id",
   authenticate,
-  authorize(["admin"]),
+  authorize(["superadmin", "admin"]),
   unitController.updateUnit
 );
 
 // DELETE /api/units/:id - Hapus unit (admin only)
-router.delete(
-  "/:id",
+// PUT /api/units/:id/deactivate - Nonaktifkan unit (admin only)
+router.put(
+  "/:id/deactivate",
   authenticate,
-  authorize(["admin"]),
-  unitController.deleteUnit
+  authorize(["superadmin", "admin"]),
+  unitController.deactivateUnit
+);
+
+// PUT /api/units/:id/activate - Aktifkan kembali unit (admin only)
+router.put(
+  "/:id/activate",
+  authenticate,
+  authorize(["superadmin", "admin"]),
+  unitController.activateUnit
 );
 
 module.exports = router;

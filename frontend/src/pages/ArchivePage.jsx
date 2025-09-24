@@ -32,10 +32,11 @@ const ArchivePage = () => {
 
   // Get user data untuk cek role
   const userData = getSafeUserDataNoRedirect();
+  const isSuperAdmin = userData?.role === "superadmin";
   const isAdmin = userData?.role === "admin";
   const isAdminUnit = userData?.role === "admin_unit";
-  // Perubahan kebijakan: hanya admin_unit yang dapat mengelola (restore/delete) arsip
-  const canManageArchives = isAdminUnit;
+  // Izinkan restore untuk superadmin, admin, dan admin_unit (selaras dengan backend)
+  const canManageArchives = isSuperAdmin || isAdmin || isAdminUnit;
 
   // Initialize modal hook
   const {
@@ -85,6 +86,10 @@ const ArchivePage = () => {
       console.error("Error fetching archive stats:", err);
     }
   };
+
+  // View modal state
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewDoc, setViewDoc] = useState(null);
 
   const handleRestore = async (archiveId) => {
     await showRestoreConfirm({
@@ -220,6 +225,7 @@ const ArchivePage = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              autoComplete="off"
             />
           </div>
 
@@ -326,6 +332,27 @@ const ArchivePage = () => {
 
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
+                        {/* Tombol Lihat Dokumen (buka viewer SOP) - tersedia untuk semua user */}
+                        <button
+                          onClick={() => {
+                            // Navigasi ke viewer SOP internal menggunakan original_sop_id
+                            try {
+                              const sopId = doc.original_sop_id || doc.id;
+                              if (sopId) {
+                                window.open(`/sop/view/${sopId}`, "_blank");
+                              } else {
+                                setViewDoc(doc);
+                                setShowViewModal(true);
+                              }
+                            } catch {
+                              setViewDoc(doc);
+                              setShowViewModal(true);
+                            }
+                          }}
+                          className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50"
+                          title="Lihat Dokumen">
+                          <FiEye />
+                        </button>
                         {/* Tombol Restore - hanya untuk admin_unit */}
                         {canManageArchives && (
                           <button
@@ -360,6 +387,78 @@ const ArchivePage = () => {
         showCancel={modalState.showCancel}
         isLoading={modalState.isLoading}
       />
+
+      {/* View Archive Detail Modal */}
+      {showViewModal && viewDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Detail Arsip Dokumen
+              </h3>
+              <p className="text-sm text-gray-500">
+                Informasi versi dokumen yang diarsipkan
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs text-gray-500">Judul</div>
+                <div className="text-sm font-medium text-gray-800">
+                  {viewDoc.title || "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Kode SOP</div>
+                <div className="text-sm font-medium text-gray-800">
+                  {viewDoc.sop_code || "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Versi</div>
+                <div className="text-sm font-medium text-gray-800">
+                  {viewDoc.version || "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Unit</div>
+                <div className="text-sm font-medium text-gray-800">
+                  {viewDoc.unit_scope_name || "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Diarsipkan Pada</div>
+                <div className="text-sm font-medium text-gray-800">
+                  {formatDateTime(viewDoc.archived_at)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Diarsipkan Oleh</div>
+                <div className="text-sm font-medium text-gray-800">
+                  {viewDoc.archived_by_name || "-"}
+                </div>
+              </div>
+              {viewDoc.archived_reason && (
+                <div className="md:col-span-2">
+                  <div className="text-xs text-gray-500">Alasan Arsip</div>
+                  <div className="text-sm text-gray-700">
+                    {viewDoc.archived_reason}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end mt-6 gap-3">
+              <button
+                onClick={() => {
+                  setShowViewModal(false);
+                  setViewDoc(null);
+                }}
+                className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200">
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

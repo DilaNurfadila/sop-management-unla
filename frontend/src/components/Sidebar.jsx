@@ -9,7 +9,7 @@ import {
   FiUserPlus,
   FiClipboard,
   FiCheckSquare,
-  FiEdit,
+  FiEye,
 } from "react-icons/fi";
 // Import komponen navigasi dari React Router
 import { Link, useLocation } from "react-router-dom";
@@ -30,13 +30,17 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
   // Mendapatkan data user untuk pengecekan role
   const userData = getSafeUserDataNoRedirect();
-  const isAdmin = userData?.role === "admin" || userData?.role === "admin_unit";
+  const isSuperAdmin = userData?.role === "superadmin";
+  const isAdmin = userData?.role === "admin";
+  const isAdminUnit = userData?.role === "admin_unit";
 
   return (
     <div
-      className={`${
-        sidebarOpen ? "w-64" : "w-20"
-      } bg-blue-800 text-white transition-all duration-300 h-full`}>
+      className={`bg-blue-800 text-white h-full z-40
+        md:relative md:translate-x-0 md:transition-none
+        fixed inset-y-0 left-0 transform transition-transform duration-300
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        w-64 ${sidebarOpen ? "md:w-64" : "md:w-20"}`}>
       {/* Header sidebar dengan judul dan tombol toggle */}
       <div className="p-4 flex items-center justify-between">
         {/* Conditional rendering judul berdasarkan state sidebar */}
@@ -50,8 +54,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         {/* Tombol toggle sidebar expand/collapse */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-1 rounded-lg hover:bg-blue-700">
-          {/* Icon arrow berubah sesuai state sidebar */}
+          className="p-1 rounded-lg hover:bg-blue-700"
+          aria-label="Toggle sidebar">
           {sidebarOpen ? "«" : "»"}
         </button>
       </div>
@@ -91,19 +95,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           {sidebarOpen && <span className="ml-3">Arsip Dokumen</span>}
         </Link>
 
-        {/* Menu Review SOP - Untuk user yang memiliki role reviewer/approver */}
-        <Link
-          to="/review"
-          className={`flex items-center w-full p-3 my-1 ${
-            currentPage === "review" ? "bg-blue-700" : ""
-          } rounded-lg transition-colors`}>
-          <FiCheckSquare size={20} />
-          {/* Text label hanya tampil saat sidebar expanded */}
-          {sidebarOpen && <span className="ml-3">Review SOP</span>}
-        </Link>
-
-        {/* Menu Pengelolaan Pengguna - Hanya untuk Admin Penuh */}
-        {userData?.role === "admin" && (
+        {/* Menu Pengelolaan Pengguna - Untuk Superadmin */}
+        {isSuperAdmin && (
           <Link
             to="/users"
             className={`flex items-center w-full p-3 my-1 ${
@@ -115,8 +108,10 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           </Link>
         )}
 
-        {/* Menu Pengelolaan Unit - Hanya untuk Admin Penuh */}
-        {userData?.role === "admin" && (
+        {/* Menu Superadmin Panel dihilangkan (permintaan) */}
+
+        {/* Menu Pengelolaan Unit - Hanya untuk Admin Penuh (tetap admin, superadmin juga dapat via isAdmin check elsewhere if needed) */}
+        {(isAdmin || isSuperAdmin) && (
           <Link
             to="/units"
             className={`flex items-center w-full p-3 my-1 ${
@@ -128,8 +123,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           </Link>
         )}
 
-        {/* Menu Riwayat Aktivitas - Hanya untuk Admin Penuh */}
-        {userData?.role === "admin" && (
+        {/* Menu Riwayat Aktivitas - Hanya untuk Superadmin */}
+        {isSuperAdmin && (
           <Link
             to="/activity-logs"
             className={`flex items-center w-full p-3 my-1 ${
@@ -141,8 +136,20 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           </Link>
         )}
 
+        {/* Menu Feedback - Admin & Admin Unit & Superadmin */}
+        {(isSuperAdmin || isAdmin || isAdminUnit) && (
+          <Link
+            to="/feedback"
+            className={`flex items-center w-full p-3 my-1 ${
+              currentPage === "feedback" ? "bg-blue-700" : ""
+            } rounded-lg transition-colors`}>
+            <FiCheckSquare size={20} />
+            {sidebarOpen && <span className="ml-3">Feedback</span>}
+          </Link>
+        )}
+
         {/* Menu Tugaskan - Hanya untuk Admin */}
-        {isAdmin && (
+        {(isAdmin || isAdminUnit) && (
           <Link
             to="/sop/assign-creator"
             className={`flex items-center w-full p-3 my-1 ${
@@ -155,7 +162,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         )}
 
         {/* Menu Kelola Penugasan - Hanya untuk Admin */}
-        {isAdmin && (
+        {(isAdmin || isAdminUnit) && (
           <Link
             to="/sop/assignment-management"
             className={`flex items-center w-full p-3 my-1 ${
@@ -170,7 +177,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         )}
 
         {/* Menu Penugasan Saya - Untuk user dan admin_unit yang ditugaskan */}
-        {(userData?.role === "user" || userData?.role === "admin_unit") && (
+        {(userData?.role === "user" || isAdminUnit) && (
           <Link
             to="/my-assignments"
             className={`flex items-center w-full p-3 my-1 ${
@@ -179,6 +186,18 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             <FiClipboard size={20} />
             {/* Text label hanya tampil saat sidebar expanded */}
             {sidebarOpen && <span className="ml-3">Penugasan Saya</span>}
+          </Link>
+        )}
+
+        {/* Menu Review SOP - Untuk reviewer / admin / admin_unit / superadmin */}
+        {(userData?.role === "user" || isAdminUnit) && (
+          <Link
+            to="/review"
+            className={`flex items-center w-full p-3 my-1 ${
+              location.pathname.startsWith("/review") ? "bg-blue-700" : ""
+            } rounded-lg transition-colors`}>
+            <FiEye size={20} />
+            {sidebarOpen && <span className="ml-3">Review SOP</span>}
           </Link>
         )}
       </nav>

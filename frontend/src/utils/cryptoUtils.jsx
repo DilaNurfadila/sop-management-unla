@@ -106,7 +106,7 @@ export const decryptUserData = (encryptedUser) => {
       return decrypted || field || "";
     };
 
-    return {
+    const result = {
       id: encryptedUser.id, // ID tidak perlu dekripsi
       email: safeDecrypt(encryptedUser.email),
       name: safeDecrypt(encryptedUser.name),
@@ -118,6 +118,11 @@ export const decryptUserData = (encryptedUser) => {
       created_at: encryptedUser.created_at,
       updated_at: encryptedUser.updated_at,
     };
+    // Optional: unit_name if provided by backend /auth/me
+    if (encryptedUser.unit_name) {
+      result.unit_name = safeDecrypt(encryptedUser.unit_name);
+    }
+    return result;
   } catch (error) {
     console.error("User data decryption error:", error);
     // Return original dengan fallback values

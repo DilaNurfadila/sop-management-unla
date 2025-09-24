@@ -93,6 +93,7 @@ const ArchiveReasonModal = ({ isOpen, onClose, onConfirm, isLoading }) => {
                   onChange={() => handlePresetSelect(presetReason)}
                   className="mr-3 text-blue-600 focus:ring-blue-500"
                   disabled={isLoading}
+                  autoComplete="off"
                 />
                 <span className="text-sm text-gray-700">{presetReason}</span>
               </label>

@@ -223,6 +223,7 @@ const Login = () => {
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 placeholder-gray-400"
                     placeholder="Masukkan email Anda"
                     required
+                    autoComplete="off"
                   />
                 </div>
               </div>
@@ -244,6 +245,7 @@ const Login = () => {
                     className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 placeholder-gray-400"
                     placeholder="Masukkan password Anda"
                     required
+                    autoComplete="off"
                   />
                   <button
                     type="button"

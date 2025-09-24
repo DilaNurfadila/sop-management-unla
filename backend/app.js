@@ -32,6 +32,7 @@ const reviewRoutes = require("./routes/reviewRoutes");
 const qrCodeRoutes = require("./routes/qrCodeRoutes");
 const healthRoutes = require("./routes/healthRoutes");
 const publicVerifyRoutes = require("./routes/publicVerifyRoutes");
+const kpiRoutes = require("./routes/kpiRoutes");
 
 // Buat instance Express
 const app = express();
@@ -69,6 +70,7 @@ app.use("/api/sop-visualization", sopVisualizationRoutes);
 app.use("/api/review", reviewRoutes);
 app.use("/api/qr", qrCodeRoutes);
 app.use("/api/health", healthRoutes);
+app.use("/api/kpi", kpiRoutes);
 // Endpoint publik verifikasi QR (tanpa auth), dipasang di root agar URL ringkas untuk QR scanner
 app.use("/", publicVerifyRoutes);
 

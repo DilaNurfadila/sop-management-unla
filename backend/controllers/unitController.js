@@ -38,20 +38,28 @@ const logUnitActivity = async (
       targetData?.id || null,
       targetData ? "unit" : null
     );
-  } catch (error) {// Tidak throw error agar tidak mengganggu flow utama
+  } catch (error) {
+    // Tidak throw error agar tidak mengganggu flow utama
   }
 };
 
 // Mengambil semua unit
 exports.getAllUnits = async (req, res) => {
   try {
-    const units = await Unit.findAll();
+    let units = await Unit.findAll();
+    // Untuk non-admin, sembunyikan unit yang dinonaktifkan (kode_unit diawali 'disabled:')
+    if (req.user?.role !== "admin") {
+      units = units.filter(
+        (u) => !String(u.kode_unit || "").startsWith("disabled:")
+      );
+    }
     res.status(200).json({
       success: true,
       message: "Data unit berhasil diambil",
       units: units,
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mengambil data unit",
       error: error.message,
@@ -62,13 +70,18 @@ exports.getAllUnits = async (req, res) => {
 // Mengambil semua unit untuk registrasi (tanpa autentikasi)
 exports.getAllUnitsPublic = async (req, res) => {
   try {
-    const units = await Unit.findAll();
+    const unitsAll = await Unit.findAll();
+    // Publik hanya melihat unit aktif
+    const units = unitsAll.filter(
+      (u) => !String(u.kode_unit || "").startsWith("disabled:")
+    );
     res.status(200).json({
       success: true,
       message: "Data unit berhasil diambil",
       units: units,
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mengambil data unit",
       error: error.message,
@@ -94,7 +107,8 @@ exports.getUnitById = async (req, res) => {
       message: "Data unit berhasil diambil",
       unit: unit,
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mengambil data unit",
       error: error.message,
@@ -151,7 +165,8 @@ exports.createUnit = async (req, res) => {
       message: "Unit berhasil dibuat",
       unit: newUnit,
     });
-  } catch (error) {if (error.message.includes("sudah digunakan")) {
+  } catch (error) {
+    if (error.message.includes("sudah digunakan")) {
       return res.status(409).json({
         success: false,
         message: error.message,
@@ -227,7 +242,8 @@ exports.updateUnit = async (req, res) => {
       message: "Unit berhasil diupdate",
       unit: updatedUnit,
     });
-  } catch (error) {if (error.message.includes("tidak ditemukan")) {
+  } catch (error) {
+    if (error.message.includes("tidak ditemukan")) {
       return res.status(404).json({
         success: false,
         message: error.message,
@@ -249,61 +265,136 @@ exports.updateUnit = async (req, res) => {
   }
 };
 
-// Hapus unit
-exports.deleteUnit = async (req, res) => {
+// Nonaktifkan unit (soft deactivate dengan prefix pada kode_unit)
+exports.deactivateUnit = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validasi role - hanya admin yang bisa menghapus unit
     if (req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Hanya admin yang dapat menghapus unit",
+        message: "Hanya admin yang dapat menonaktifkan unit",
       });
     }
 
-    // Ambil data unit sebelum dihapus untuk logging
-    const unitToDelete = await Unit.findById(id);
-    if (!unitToDelete) {
+    const unit = await Unit.findById(id);
+    if (!unit) {
       return res.status(404).json({
         success: false,
         message: "Unit tidak ditemukan",
       });
     }
 
-    await Unit.delete(id);
+    if (String(unit.kode_unit || "").startsWith("disabled:")) {
+      return res.status(400).json({
+        success: false,
+        message: "Unit sudah dinonaktifkan",
+      });
+    }
 
-    // Ambil nama pengguna dari database
+    const updated = await Unit.update(id, {
+      nomor_unit: unit.nomor_unit,
+      kode_unit: `disabled:${unit.kode_unit}`,
+      nama_unit: unit.nama_unit,
+    });
+
     const db = require("../config/db");
     const [userRows] = await db.execute("SELECT name FROM users WHERE id = ?", [
       req.user.id,
     ]);
     const adminName = userRows[0]?.name || req.user?.email || "Admin";
 
-    // Log aktivitas penghapusan unit
     await logUnitActivity(
       req.user,
-      "DELETE",
-      `Admin (${adminName}) menghapus unit: ${unitToDelete.nama_unit} (${unitToDelete.kode_unit})`,
+      "DEACTIVATE",
+      `Admin (${adminName}) menonaktifkan unit: ${unit.nama_unit} (${unit.kode_unit})`,
       req,
-      { id: unitToDelete.id },
+      { id: updated.id },
       adminName
     );
 
     res.status(200).json({
       success: true,
-      message: "Unit berhasil dihapus",
+      message: "Unit berhasil dinonaktifkan",
+      unit: updated,
     });
-  } catch (error) {if (error.message.includes("tidak ditemukan")) {
-      return res.status(404).json({
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Gagal menonaktifkan unit",
+      error: error.message,
+    });
+  }
+};
+
+// Aktifkan kembali unit (restore kode_unit dari prefix disabled:)
+exports.activateUnit = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
         success: false,
-        message: error.message,
+        message: "Hanya admin yang dapat mengaktifkan unit",
       });
     }
 
+    const unit = await Unit.findById(id);
+    if (!unit) {
+      return res.status(404).json({
+        success: false,
+        message: "Unit tidak ditemukan",
+      });
+    }
+
+    const kode = String(unit.kode_unit || "");
+    if (!kode.startsWith("disabled:")) {
+      return res.status(400).json({
+        success: false,
+        message: "Unit sudah dalam keadaan aktif",
+      });
+    }
+
+    const restoredKode = kode.replace(/^disabled:/, "");
+    // Pastikan tidak terjadi konflik kode saat reaktivasi
+    const existing = await Unit.findByKode(restoredKode);
+    if (existing && existing.id !== unit.id) {
+      return res.status(409).json({
+        success: false,
+        message: `Kode unit "${restoredKode}" sudah digunakan oleh unit lain`,
+      });
+    }
+
+    const updated = await Unit.update(id, {
+      nomor_unit: unit.nomor_unit,
+      kode_unit: restoredKode,
+      nama_unit: unit.nama_unit,
+    });
+
+    const db = require("../config/db");
+    const [userRows] = await db.execute("SELECT name FROM users WHERE id = ?", [
+      req.user.id,
+    ]);
+    const adminName = userRows[0]?.name || req.user?.email || "Admin";
+
+    await logUnitActivity(
+      req.user,
+      "ACTIVATE",
+      `Admin (${adminName}) mengaktifkan kembali unit: ${updated.nama_unit} (${updated.kode_unit})`,
+      req,
+      { id: updated.id },
+      adminName
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Unit berhasil diaktifkan kembali",
+      unit: updated,
+    });
+  } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Gagal menghapus unit",
+      message: "Gagal mengaktifkan unit",
       error: error.message,
     });
   }
@@ -321,7 +412,12 @@ exports.searchUnits = async (req, res) => {
       });
     }
 
-    const units = await Unit.search(q.trim());
+    let units = await Unit.search(q.trim());
+    if (req.user?.role !== "admin") {
+      units = units.filter(
+        (u) => !String(u.kode_unit || "").startsWith("disabled:")
+      );
+    }
 
     res.status(200).json({
       success: true,
@@ -329,7 +425,8 @@ exports.searchUnits = async (req, res) => {
       units: units,
       keyword: q.trim(),
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mencari unit",
       error: error.message,
@@ -347,7 +444,8 @@ exports.getUnitStats = async (req, res) => {
       message: "Statistik unit berhasil diambil",
       stats: stats,
     });
-  } catch (error) {res.status(500).json({
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Gagal mengambil statistik unit",
       error: error.message,

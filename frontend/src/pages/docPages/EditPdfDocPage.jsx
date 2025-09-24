@@ -206,6 +206,7 @@ const EditSOPPage = () => {
                 value={formData.sop_code}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 focus:outline-none"
                 readOnly
+                autoComplete="off"
               />
               <p className="text-xs text-gray-500 mt-1">
                 SOP Code di-generate otomatis saat disahkan.
@@ -240,6 +241,7 @@ const EditSOPPage = () => {
               placeholder="Judul lengkap Standard Operating Procedure"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
+              autoComplete="off"
             />
           </div>
 
@@ -400,6 +402,7 @@ const EditSOPPage = () => {
                   checked={versionType === "minor"}
                   onChange={(e) => setVersionType(e.target.value)}
                   className="mt-1"
+                  autoComplete="off"
                 />
                 <div>
                   <div className="font-semibold text-green-700">
@@ -425,6 +428,7 @@ const EditSOPPage = () => {
                   checked={versionType === "major"}
                   onChange={(e) => setVersionType(e.target.value)}
                   className="mt-1"
+                  autoComplete="off"
                 />
                 <div>
                   <div className="font-semibold text-red-700">

@@ -16,6 +16,40 @@ import {
   getSopNames as fetchSopNamesApi,
 } from "../../services/flowchartApi.jsx";
 
+// Waktu helpers: parse and format "<angka> <unit>" strings
+const TIME_UNITS = ["detik", "menit", "jam", "hari", "minggu", "bulan"];
+
+function normalizeUnit(unit) {
+  if (!unit) return "menit";
+  const u = String(unit).toLowerCase().trim();
+  if (TIME_UNITS.includes(u)) return u;
+  if (u.startsWith("detik")) return "detik";
+  if (u.startsWith("menit")) return "menit";
+  if (u.startsWith("jam")) return "jam";
+  if (u.startsWith("hari")) return "hari";
+  if (u.startsWith("minggu")) return "minggu";
+  if (u.startsWith("bulan")) return "bulan";
+  return "menit";
+}
+
+function parseTimeRequired(str) {
+  if (!str || typeof str !== "string") return { value: "", unit: "menit" };
+  const m = str.trim().match(/(\d+(?:[.,]\d+)?)(?:\s*)([A-Za-zÀ-ÿ]+)/);
+  if (!m) return { value: "", unit: "menit" };
+  const rawVal = m[1].replace(",", ".");
+  const num = isNaN(Number(rawVal)) ? "" : rawVal;
+  const unit = normalizeUnit(m[2]);
+  return { value: num, unit };
+}
+
+function toTimeRequiredString(value, unit) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return "";
+  }
+  const u = normalizeUnit(unit);
+  return `${value} ${u}`;
+}
+
 function ManageSOPVizPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -38,7 +72,7 @@ function ManageSOPVizPage() {
       fetchAvailableUsers();
       fetchSopName();
     }
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchSopName = async () => {
     try {
@@ -97,11 +131,14 @@ function ManageSOPVizPage() {
         data.forEach((sop) => {
           // Sesuaikan dengan struktur data dari backend
           const key = `${sop.activity_id}-${sop.person_id}`;
+          const parsed = parseTimeRequired(sop.time_required || "");
           initialSops[key] = {
             status: sop.status,
             return_to_item_id: sop.return_to_activity_id,
             kelengkapan: sop.completeness || "", // Backend: completeness
             waktu: sop.time_required || "", // Backend: time_required
+            waktu_value: parsed.value,
+            waktu_unit: parsed.unit,
             output: sop.output || "",
             keterangan: sop.notes || "", // Backend: notes
           };
@@ -215,7 +252,9 @@ function ManageSOPVizPage() {
     kelengkapan = "",
     waktu = "",
     output = "",
-    keterangan = ""
+    keterangan = "",
+    waktuValue = undefined,
+    waktuUnit = undefined
   ) => {
     setSelectedSops((prev) => {
       const newSops = { ...prev };
@@ -228,11 +267,23 @@ function ManageSOPVizPage() {
 
       // Add new assignment if status and colId are provided
       if (status && colId) {
+        const finalWaktu =
+          waktuValue !== undefined && waktuUnit !== undefined
+            ? toTimeRequiredString(waktuValue, waktuUnit)
+            : waktu;
         newSops[`${itemId}-${colId}`] = {
           status,
           return_to_item_id: returnToItemId,
           kelengkapan,
-          waktu,
+          waktu: finalWaktu,
+          waktu_value:
+            waktuValue !== undefined
+              ? waktuValue
+              : prev[`${itemId}-${colId}`]?.waktu_value,
+          waktu_unit:
+            waktuUnit !== undefined
+              ? waktuUnit
+              : prev[`${itemId}-${colId}`]?.waktu_unit,
           output,
           keterangan,
         };
@@ -244,6 +295,29 @@ function ManageSOPVizPage() {
   const saveSops = async (e) => {
     e.preventDefault();
     if (!id) return;
+    // Frontend validation: completeness (kelengkapan), time_required (waktu), output must be non-empty for selected rows
+    const errors = [];
+    for (const key in selectedSops) {
+      const val = selectedSops[key];
+      if (!val || typeof val !== "object") continue;
+      const missing = [];
+      if (!val.kelengkapan || String(val.kelengkapan).trim() === "")
+        missing.push("Kelengkapan");
+      const timeStr =
+        val.waktu_value !== undefined && val.waktu_unit
+          ? toTimeRequiredString(val.waktu_value, val.waktu_unit)
+          : val.waktu;
+      if (!timeStr || String(timeStr).trim() === "") missing.push("Waktu");
+      if (!val.output || String(val.output).trim() === "")
+        missing.push("Output");
+      if (missing.length) {
+        errors.push({ key, missing });
+      }
+    }
+    if (errors.length) {
+      alert("Pastikan kelengkapan, waktu, dan output terisi semua");
+      return;
+    }
     setLoading(true);
     try {
       const updates = [];
@@ -251,6 +325,12 @@ function ManageSOPVizPage() {
         if (selectedSops[key]) {
           const [activity_id, person_id] = key.split("-").map(Number);
           const sopData = selectedSops[key];
+          const timeStr =
+            typeof sopData === "object"
+              ? sopData.waktu_value !== undefined && sopData.waktu_unit
+                ? toTimeRequiredString(sopData.waktu_value, sopData.waktu_unit)
+                : sopData.waktu || ""
+              : "";
           updates.push({
             activity_id, // Sesuaikan dengan backend
             person_id, // Sesuaikan dengan backend
@@ -259,7 +339,7 @@ function ManageSOPVizPage() {
               typeof sopData === "object" ? sopData.return_to_item_id : null,
             completeness:
               typeof sopData === "object" ? sopData.kelengkapan : "", // Backend field
-            time_required: typeof sopData === "object" ? sopData.waktu : "", // Backend field
+            time_required: timeStr, // Backend field
             output: typeof sopData === "object" ? sopData.output : "",
             notes: typeof sopData === "object" ? sopData.keterangan : "", // Backend field
           });
@@ -271,7 +351,11 @@ function ManageSOPVizPage() {
       await fetchSops(id);
     } catch (error) {
       console.error("Error saving SOPs:", error);
-      alert("Error menyimpan data SOP");
+      const msg =
+        error?.response?.data?.message ||
+        error.message ||
+        "Error menyimpan data SOP";
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -311,6 +395,8 @@ function ManageSOPVizPage() {
       let waktu = "";
       let output = "";
       let keterangan = "";
+      let waktu_value = "";
+      let waktu_unit = "menit";
 
       if (typeof sopData === "string") {
         status = sopData;
@@ -319,6 +405,18 @@ function ManageSOPVizPage() {
         returnToItemId = sopData.return_to_item_id || "";
         kelengkapan = sopData.kelengkapan || "";
         waktu = sopData.waktu || "";
+        // read parsed fields or parse on the fly
+        if (
+          sopData.waktu_value !== undefined &&
+          sopData.waktu_unit !== undefined
+        ) {
+          waktu_value = sopData.waktu_value;
+          waktu_unit = sopData.waktu_unit;
+        } else {
+          const parsed = parseTimeRequired(waktu);
+          waktu_value = parsed.value;
+          waktu_unit = parsed.unit;
+        }
         output = sopData.output || "";
         keterangan = sopData.keterangan || "";
       }
@@ -329,6 +427,8 @@ function ManageSOPVizPage() {
         returnToItemId,
         kelengkapan,
         waktu,
+        waktu_value,
+        waktu_unit,
         output,
         keterangan,
       };
@@ -340,10 +440,25 @@ function ManageSOPVizPage() {
       returnToItemId: "",
       kelengkapan: "",
       waktu: "",
+      waktu_value: "",
+      waktu_unit: "menit",
       output: "",
       keterangan: "",
     };
   };
+
+  // Track current unique status owners so only one "Mulai" and one "Selesai" can exist
+  const currentMulaiKey =
+    Object.keys(selectedSops).find((key) => {
+      const v = selectedSops[key];
+      return (typeof v === "object" ? v.status : v) === "Mulai";
+    }) || null;
+
+  const currentSelesaiKey =
+    Object.keys(selectedSops).find((key) => {
+      const v = selectedSops[key];
+      return (typeof v === "object" ? v.status : v) === "Selesai";
+    }) || null;
 
   if (loading) {
     return (
@@ -396,6 +511,7 @@ function ManageSOPVizPage() {
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Masukkan nama kegiatan"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoComplete="off"
                     />
                   </div>
                   <button
@@ -426,7 +542,9 @@ function ManageSOPVizPage() {
                       <option value="">Pilih pengguna...</option>
                       {availableUsers
                         .filter(
-                          (user) => !cols.some((col) => col.user_id === user.id)
+                          (user) =>
+                            user.role !== "superadmin" &&
+                            !cols.some((col) => col.user_id === user.id)
                         )
                         .map((user) => (
                           <option key={user.id} value={user.id}>
@@ -435,7 +553,9 @@ function ManageSOPVizPage() {
                         ))}
                     </select>
                     {availableUsers.filter(
-                      (user) => !cols.some((col) => col.user_id === user.id)
+                      (user) =>
+                        user.role !== "superadmin" &&
+                        !cols.some((col) => col.user_id === user.id)
                     ).length === 0 && (
                       <p className="text-sm text-gray-500 mt-1">
                         Semua pengguna sudah ditambahkan sebagai penanggungjawab
@@ -446,7 +566,9 @@ function ManageSOPVizPage() {
                     type="submit"
                     disabled={
                       availableUsers.filter(
-                        (user) => !cols.some((col) => col.user_id === user.id)
+                        (user) =>
+                          user.role !== "superadmin" &&
+                          !cols.some((col) => col.user_id === user.id)
                       ).length === 0
                     }
                     className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md">
@@ -477,6 +599,7 @@ function ManageSOPVizPage() {
                         value={editingName}
                         onChange={(e) => setEditingName(e.target.value)}
                         className="flex-1 px-3 py-1 border border-gray-300 rounded-md"
+                        autoComplete="off"
                       />
                       <div className="flex gap-2">
                         <button
@@ -611,35 +734,35 @@ function ManageSOPVizPage() {
             </h3>
 
             <form onSubmit={saveSops}>
-              <div className="overflow-x-auto w-full h-96 overflow-y-auto">
-                <table className="w-full table-fixed h-full">
-                  <thead className="bg-gray-50">
-                    <tr className="h-16">
-                      <th className="w-16 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <div className="overflow-x-auto w-full h-96 overflow-y-auto rounded-lg border border-gray-200">
+                <table className="w-full table-fixed h-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                    <tr className="h-12">
+                      <th className="w-16 px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         No
                       </th>
-                      <th className="w-64 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-64 px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Nama Kegiatan
                       </th>
-                      <th className="w-48 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-48 px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Penanggungjawab
                       </th>
-                      <th className="w-32 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-32 px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Status
                       </th>
-                      <th className="w-48 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-48 px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Kembali ke Kegiatan
                       </th>
-                      <th className="w-40 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Kelengkapan
+                      <th className="w-40 px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Kelengkapan <span className="text-red-600">*</span>
                       </th>
-                      <th className="w-32 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Waktu
+                      <th className="w-40 px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Waktu <span className="text-red-600">*</span>
                       </th>
-                      <th className="w-40 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Output
+                      <th className="w-40 px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Output <span className="text-red-600">*</span>
                       </th>
-                      <th className="w-48 px-4 py-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-48 px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Keterangan
                       </th>
                     </tr>
@@ -654,35 +777,65 @@ function ManageSOPVizPage() {
                         returnToItemId,
                         kelengkapan,
                         waktu,
+                        waktu_value: waktuValue,
+                        waktu_unit: waktuUnit,
                         output,
                         keterangan,
                       } = assignment;
 
                       return (
-                        <tr key={item.id} className="hover:bg-gray-50 h-16">
-                          <td className="px-4 py-6 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <tr
+                          key={item.id}
+                          className="hover:bg-gray-50 h-12 odd:bg-white even:bg-gray-50/50">
+                          <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900 text-center">
                             {index + 1}
                           </td>
-                          <td className="px-4 py-6 text-sm text-gray-900">
-                            {item.name}
+                          <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap overflow-hidden">
+                            <div
+                              className="truncate max-w-[16rem]"
+                              title={item.name}>
+                              {item.name}
+                            </div>
                           </td>
-                          <td className="px-4 py-6">
+                          <td className="px-3 py-3">
                             <select
                               value={colId}
                               onChange={(e) => {
                                 const newColId = e.target.value;
                                 if (newColId) {
+                                  const parsedNewColId = parseInt(newColId);
+                                  // Default status: activity #1 -> Mulai, others -> Proses
+                                  let defaultStatus =
+                                    status && status !== ""
+                                      ? status
+                                      : index === 0
+                                      ? "Mulai"
+                                      : "Proses";
+                                  // Ensure uniqueness: if Mulai already owned by other row, fallback to Proses
+                                  if (
+                                    defaultStatus === "Mulai" &&
+                                    currentMulaiKey &&
+                                    currentMulaiKey !==
+                                      `${item.id}-${parsedNewColId}`
+                                  ) {
+                                    defaultStatus = "Proses";
+                                  }
+
                                   handleSopChange(
                                     item.id,
-                                    parseInt(newColId),
-                                    status || "Mulai",
-                                    returnToItemId
-                                      ? parseInt(returnToItemId)
+                                    parsedNewColId,
+                                    defaultStatus,
+                                    defaultStatus === "Pilihan"
+                                      ? returnToItemId
+                                        ? parseInt(returnToItemId)
+                                        : null
                                       : null,
                                     kelengkapan,
                                     waktu,
                                     output,
-                                    keterangan
+                                    keterangan,
+                                    waktuValue,
+                                    waktuUnit
                                   );
                                 } else {
                                   // Clear assignment
@@ -697,7 +850,7 @@ function ManageSOPVizPage() {
                                   });
                                 }
                               }}
-                              className="w-full px-2 py-2 h-12 border border-gray-300 rounded-md text-sm flex items-center leading-6">
+                              className="w-full px-2 py-2 h-10 border border-gray-300 rounded-md text-sm flex items-center leading-6">
                               <option value="">Pilih penanggungjawab</option>
                               {cols.map((col) => (
                                 <option key={col.id} value={col.id}>
@@ -708,7 +861,7 @@ function ManageSOPVizPage() {
                               ))}
                             </select>
                           </td>
-                          <td className="px-4 py-6">
+                          <td className="px-3 py-3">
                             <select
                               value={status}
                               onChange={(e) => {
@@ -726,7 +879,9 @@ function ManageSOPVizPage() {
                                     kelengkapan,
                                     waktu,
                                     output,
-                                    keterangan
+                                    keterangan,
+                                    waktuValue,
+                                    waktuUnit
                                   );
                                 } else {
                                   alert(
@@ -735,16 +890,30 @@ function ManageSOPVizPage() {
                                 }
                               }}
                               disabled={!colId}
-                              className="w-full px-2 py-2 h-12 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100">
+                              className="w-full px-2 py-2 h-10 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100">
                               <option value="">Pilih status</option>
-                              <option value="Mulai">Mulai</option>
+                              <option
+                                value="Mulai"
+                                disabled={
+                                  !!currentMulaiKey &&
+                                  currentMulaiKey !== `${item.id}-${colId}`
+                                }>
+                                Mulai
+                              </option>
                               <option value="Proses">Proses</option>
                               <option value="Pilihan">Pilihan</option>
-                              <option value="Selesai">Selesai</option>
+                              <option
+                                value="Selesai"
+                                disabled={
+                                  !!currentSelesaiKey &&
+                                  currentSelesaiKey !== `${item.id}-${colId}`
+                                }>
+                                Selesai
+                              </option>
                             </select>
                           </td>
                           {/* Kembali ke Kegiatan */}
-                          <td className="px-4 py-6">
+                          <td className="px-3 py-3">
                             <select
                               value={returnToItemId}
                               onChange={(e) => {
@@ -760,12 +929,14 @@ function ManageSOPVizPage() {
                                     kelengkapan,
                                     waktu,
                                     output,
-                                    keterangan
+                                    keterangan,
+                                    waktuValue,
+                                    waktuUnit
                                   );
                                 }
                               }}
                               disabled={!colId || status !== "Pilihan"}
-                              className="w-full px-2 py-2 h-12 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100">
+                              className="w-full px-2 py-2 h-10 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100">
                               <option value="">Pilih kegiatan tujuan</option>
                               {items.map((targetItem, targetIndex) => (
                                 <option
@@ -777,7 +948,7 @@ function ManageSOPVizPage() {
                             </select>
                           </td>
                           {/* Kelengkapan */}
-                          <td className="px-4 py-6">
+                          <td className="px-3 py-3 whitespace-nowrap overflow-hidden">
                             <input
                               type="text"
                               value={kelengkapan}
@@ -793,43 +964,84 @@ function ManageSOPVizPage() {
                                     e.target.value,
                                     waktu,
                                     output,
-                                    keterangan
+                                    keterangan,
+                                    waktuValue,
+                                    waktuUnit
                                   );
                                 }
                               }}
                               placeholder="Kelengkapan"
                               disabled={!colId}
-                              className="w-full px-2 py-2 h-12 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100"
+                              className="w-full px-2 py-2 h-10 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100 truncate"
+                              autoComplete="off"
+                              title={kelengkapan || ""}
                             />
                           </td>
-                          {/* Waktu */}
-                          <td className="px-4 py-6">
-                            <input
-                              type="text"
-                              value={waktu}
-                              onChange={(e) => {
-                                if (colId) {
-                                  handleSopChange(
-                                    item.id,
-                                    parseInt(colId),
-                                    status,
-                                    returnToItemId
-                                      ? parseInt(returnToItemId)
-                                      : null,
-                                    kelengkapan,
-                                    e.target.value,
-                                    output,
-                                    keterangan
-                                  );
-                                }
-                              }}
-                              placeholder="Waktu"
-                              disabled={!colId}
-                              className="w-full px-2 py-2 h-12 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100"
-                            />
+                          {/* Waktu (angka + unit) */}
+                          <td className="px-3 py-3 align-middle">
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={waktuValue}
+                                onChange={(e) => {
+                                  if (colId) {
+                                    const newVal = e.target.value;
+                                    handleSopChange(
+                                      item.id,
+                                      parseInt(colId),
+                                      status,
+                                      returnToItemId
+                                        ? parseInt(returnToItemId)
+                                        : null,
+                                      kelengkapan,
+                                      waktu,
+                                      output,
+                                      keterangan,
+                                      newVal,
+                                      waktuUnit
+                                    );
+                                  }
+                                }}
+                                placeholder="0"
+                                disabled={!colId}
+                                className="w-20 px-2 py-2 h-10 border border-gray-300 rounded-md text-sm disabled:bg-gray-100"
+                                autoComplete="off"
+                              />
+                              <select
+                                value={waktuUnit}
+                                onChange={(e) => {
+                                  if (colId) {
+                                    const newUnit = e.target.value;
+                                    handleSopChange(
+                                      item.id,
+                                      parseInt(colId),
+                                      status,
+                                      returnToItemId
+                                        ? parseInt(returnToItemId)
+                                        : null,
+                                      kelengkapan,
+                                      waktu,
+                                      output,
+                                      keterangan,
+                                      waktuValue,
+                                      newUnit
+                                    );
+                                  }
+                                }}
+                                disabled={!colId}
+                                className="w-24 px-2 py-2 h-10 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                {TIME_UNITS.map((u) => (
+                                  <option key={u} value={u}>
+                                    {u.charAt(0).toUpperCase() + u.slice(1)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </td>
                           {/* Output */}
-                          <td className="px-4 py-6">
+                          <td className="px-3 py-3 whitespace-nowrap overflow-hidden">
                             <input
                               type="text"
                               value={output}
@@ -845,17 +1057,21 @@ function ManageSOPVizPage() {
                                     kelengkapan,
                                     waktu,
                                     e.target.value,
-                                    keterangan
+                                    keterangan,
+                                    waktuValue,
+                                    waktuUnit
                                   );
                                 }
                               }}
                               placeholder="Output"
                               disabled={!colId}
-                              className="w-full px-2 py-2 h-12 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100"
+                              className="w-full px-2 py-2 h-10 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100 truncate"
+                              autoComplete="off"
+                              title={output || ""}
                             />
                           </td>
                           {/* Keterangan */}
-                          <td className="px-4 py-6">
+                          <td className="px-3 py-3 whitespace-nowrap overflow-hidden">
                             <input
                               type="text"
                               value={keterangan}
@@ -871,13 +1087,17 @@ function ManageSOPVizPage() {
                                     kelengkapan,
                                     waktu,
                                     output,
-                                    e.target.value
+                                    e.target.value,
+                                    waktuValue,
+                                    waktuUnit
                                   );
                                 }
                               }}
                               placeholder="Keterangan"
                               disabled={!colId}
-                              className="w-full px-2 py-2 h-12 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100"
+                              className="w-full px-2 py-2 h-10 border border-gray-300 rounded-md text-sm flex items-center leading-6 disabled:bg-gray-100 truncate"
+                              autoComplete="off"
+                              title={keterangan || ""}
                             />
                           </td>
                         </tr>

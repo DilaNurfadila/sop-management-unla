@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 // Import crypto utility functions
 import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
+import { getCurrentUser } from "../services/authApi";
 // Import API untuk mendapatkan data unit
 import { getAllUnits } from "../services/unitApi";
 // Import icon dari react-icons untuk UI profile
@@ -12,14 +13,15 @@ import { FiUser, FiMail, FiUsers, FiBriefcase, FiMapPin } from "react-icons/fi";
  * Menampilkan informasi user tanpa fitur editing
  */
 const Profile = () => {
-  // Ambil data user dari sessionStorage menggunakan fungsi helper
-  const user = getSafeUserDataNoRedirect();
+  // State untuk data user (server truth preferred)
+  const [user, setUser] = useState(() => getSafeUserDataNoRedirect());
+  const userUnitId = user?.unit ? parseInt(user.unit) : null;
 
   // State untuk data units
   const [units, setUnits] = useState([]);
   const [userUnitName, setUserUnitName] = useState("");
 
-  // Fetch units data saat komponen mount
+  // Fetch current user (server) and units data saat komponen mount
   useEffect(() => {
     const fetchUnits = async () => {
       try {
@@ -41,22 +43,37 @@ const Profile = () => {
       }
     };
 
-    if (user) {
-      fetchUnits();
-    }
-  }, [user]);
+    const fetchCurrentUser = async () => {
+      try {
+        const serverUser = await getCurrentUser();
+        if (serverUser) {
+          setUser(serverUser);
+          // If backend already provides unit_name, set it immediately
+          if (serverUser.unit_name) {
+            setUserUnitName(serverUser.unit_name);
+          }
+        }
+      } catch (e) {
+        void e; // noop, stay with cached user
+      }
+    };
+
+    fetchCurrentUser();
+    fetchUnits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Update userUnitName ketika user atau units berubah
   useEffect(() => {
-    if (user?.unit && units.length > 0) {
-      const userUnit = units.find((unit) => unit.id === parseInt(user.unit));
+    if (userUnitId && units.length > 0) {
+      const userUnit = units.find((unit) => unit.id === userUnitId);
       if (userUnit) {
         setUserUnitName(userUnit.nama_unit);
       } else {
         setUserUnitName("");
       }
     }
-  }, [user?.unit, units]);
+  }, [userUnitId, units]);
 
   // Fungsi untuk mengkonversi role ke format yang user-friendly
   const getRoleLabel = (role) => {

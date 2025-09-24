@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   FiSearch,
   FiEdit2,
-  FiTrash2,
   FiPlus,
   FiGrid,
   FiHash,
   FiTag,
+  FiUserX,
+  FiUserCheck,
+  FiAlertTriangle,
 } from "react-icons/fi";
 import * as unitApi from "../services/unitApi";
 import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
@@ -20,7 +22,8 @@ const UnitManagementPage = () => {
   const [stats, setStats] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [showActivateModal, setShowActivateModal] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [formData, setFormData] = useState({
     nomor_unit: "",
@@ -32,28 +35,19 @@ const UnitManagementPage = () => {
 
   // Access guard - hanya admin penuh yang bisa akses
   const userData = getSafeUserDataNoRedirect();
-  if (userData?.role !== "admin") {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="max-w-md mx-auto text-center">
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            <strong className="font-bold">Akses Ditolak!</strong>
-            <span className="block sm:inline">
-              {" "}
-              Hanya admin penuh yang dapat mengakses halaman Pengelolaan Unit.
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isAdmin = userData?.role === "admin" || userData?.role === "superadmin";
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load data saat komponen dimount
   useEffect(() => {
+    if (!isAdmin) {
+      // Jangan load data untuk non-admin dan hentikan loading state
+      setLoading(false);
+      return;
+    }
     loadUnits();
     loadStats();
-  }, []);
+  }, [isAdmin]);
 
   // Filter units berdasarkan search (client-side filtering)
   useEffect(() => {
@@ -147,19 +141,39 @@ const UnitManagementPage = () => {
     }
   };
 
-  const handleDeleteUnit = async () => {
+  const handleDeactivateUnit = async () => {
     if (!selectedUnit) return;
-
     try {
-      const response = await unitApi.deleteUnit(selectedUnit.id);
-      if (response.success) {
-        setUnits(units.filter((unit) => unit.id !== selectedUnit.id));
-        setShowDeleteModal(false);
+      const res = await unitApi.deactivateUnit(selectedUnit.id);
+      if (res.success) {
+        setUnits(
+          units.map((u) =>
+            u.id === selectedUnit.id ? { ...u, ...res.unit } : u
+          )
+        );
+        setShowDeactivateModal(false);
         setSelectedUnit(null);
-        loadStats();
       }
     } catch (err) {
-      setError(err.message || "Gagal menghapus unit");
+      setError(err.message || "Gagal menonaktifkan unit");
+    }
+  };
+
+  const handleActivateUnit = async () => {
+    if (!selectedUnit) return;
+    try {
+      const res = await unitApi.activateUnit(selectedUnit.id);
+      if (res.success) {
+        setUnits(
+          units.map((u) =>
+            u.id === selectedUnit.id ? { ...u, ...res.unit } : u
+          )
+        );
+        setShowActivateModal(false);
+        setSelectedUnit(null);
+      }
+    } catch (err) {
+      setError(err.message || "Gagal mengaktifkan unit");
     }
   };
 
@@ -188,9 +202,14 @@ const UnitManagementPage = () => {
     setShowEditModal(true);
   };
 
-  const openDeleteModal = (unit) => {
+  const openDeactivateModal = (unit) => {
     setSelectedUnit(unit);
-    setShowDeleteModal(true);
+    setShowDeactivateModal(true);
+  };
+
+  const openActivateModal = (unit) => {
+    setSelectedUnit(unit);
+    setShowActivateModal(true);
   };
 
   if (loading) {
@@ -203,6 +222,19 @@ const UnitManagementPage = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {!isAdmin && (
+        <div className="min-h-[40vh] bg-gray-50 flex items-center justify-center">
+          <div className="max-w-md mx-auto text-center">
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              <strong className="font-bold">Akses Ditolak!</strong>
+              <span className="block sm:inline">
+                {" "}
+                Hanya admin penuh yang dapat mengakses halaman Pengelolaan Unit.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -249,6 +281,7 @@ const UnitManagementPage = () => {
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                autoComplete="off"
               />
             </div>
           </div>
@@ -276,7 +309,7 @@ const UnitManagementPage = () => {
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-2/4">
                   Nama Unit
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-20">
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-56">
                   Aksi
                 </th>
               </tr>
@@ -299,56 +332,98 @@ const UnitManagementPage = () => {
                   </td>
                 </tr>
               ) : (
-                filteredUnits.map((unit) => (
-                  <tr
-                    key={unit.id}
-                    className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center mr-3">
-                          <FiHash className="h-4 w-4 text-gray-600" />
-                        </div>
-                        <span className="text-sm font-semibold text-gray-900">
-                          {unit.nomor_unit}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                        <FiTag className="h-3 w-3 mr-2" />
-                        {unit.kode_unit}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                          <FiGrid className="h-4 w-4 text-green-600" />
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-gray-900">
-                            {unit.nama_unit}
+                filteredUnits.map((unit) => {
+                  const isDisabled = String(unit.kode_unit || "").startsWith(
+                    "disabled:"
+                  );
+                  const kodeDisplay = isDisabled
+                    ? unit.kode_unit.replace(/^disabled:/, "")
+                    : unit.kode_unit;
+                  const namaDisplay = unit.nama_unit;
+                  return (
+                    <tr
+                      key={unit.id}
+                      className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center mr-3">
+                            <FiHash className="h-4 w-4 text-gray-600" />
+                          </div>
+                          <span
+                            className={`text-sm font-semibold ${
+                              isDisabled ? "text-gray-400" : "text-gray-900"
+                            }`}>
+                            {unit.nomor_unit}
                           </span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex justify-center gap-1">
-                        <button
-                          onClick={() => openEditModal(unit)}
-                          className="inline-flex items-center p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit Unit">
-                          <FiEdit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => openDeleteModal(unit)}
-                          className="inline-flex items-center p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Hapus Unit">
-                          <FiTrash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${
+                            isDisabled
+                              ? "bg-gray-100 text-gray-600 border-gray-200"
+                              : "bg-blue-100 text-blue-800 border-blue-200"
+                          }`}>
+                          <FiTag className="h-3 w-3 mr-2" />
+                          {kodeDisplay}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div
+                            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                              isDisabled ? "bg-gray-100" : "bg-green-100"
+                            }`}>
+                            <FiGrid
+                              className={`h-4 w-4 ${
+                                isDisabled ? "text-gray-500" : "text-green-600"
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <span
+                              className={`text-sm font-medium ${
+                                isDisabled ? "text-gray-500" : "text-gray-900"
+                              }`}>
+                              {namaDisplay}
+                            </span>
+                            {isDisabled && (
+                              <div className="mt-1 inline-flex items-center text-xs text-gray-500">
+                                <FiAlertTriangle className="h-3 w-3 mr-1" />
+                                Dinonaktifkan
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <div className="flex justify-center gap-1">
+                          <button
+                            onClick={() => openEditModal(unit)}
+                            className="inline-flex items-center p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit Unit">
+                            <FiEdit2 className="h-4 w-4" />
+                          </button>
+                          {!isDisabled ? (
+                            <button
+                              onClick={() => openDeactivateModal(unit)}
+                              className="inline-flex items-center p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Nonaktifkan Unit">
+                              <FiUserX className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => openActivateModal(unit)}
+                              className="inline-flex items-center p-2 text-green-600 hover:text-green-900 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Aktifkan Unit">
+                              <FiUserCheck className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -395,6 +470,7 @@ const UnitManagementPage = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, nomor_unit: e.target.value })
                   }
+                  autoComplete="off"
                 />
               </div>
               <div>
@@ -409,6 +485,7 @@ const UnitManagementPage = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, kode_unit: e.target.value })
                   }
+                  autoComplete="off"
                 />
               </div>
               <div>
@@ -423,6 +500,7 @@ const UnitManagementPage = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, nama_unit: e.target.value })
                   }
+                  autoComplete="off"
                 />
               </div>
             </div>
@@ -509,6 +587,7 @@ const UnitManagementPage = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, nomor_unit: e.target.value })
                   }
+                  autoComplete="off"
                 />
               </div>
               <div>
@@ -522,6 +601,7 @@ const UnitManagementPage = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, kode_unit: e.target.value })
                   }
+                  autoComplete="off"
                 />
               </div>
               <div>
@@ -535,6 +615,7 @@ const UnitManagementPage = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, nama_unit: e.target.value })
                   }
+                  autoComplete="off"
                 />
               </div>
             </div>
@@ -583,34 +664,62 @@ const UnitManagementPage = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && selectedUnit && (
+      {/* Deactivate Confirmation Modal */}
+      {showDeactivateModal && selectedUnit && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Konfirmasi Hapus Unit
+              Nonaktifkan Unit
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Apakah Anda yakin ingin menghapus unit{" "}
-              <strong>{selectedUnit.nama_unit}</strong>?
-              <br />
-              <span className="text-red-600">
-                Tindakan ini tidak dapat dibatalkan.
-              </span>
+              Apakah Anda yakin ingin menonaktifkan unit
+              <strong> {selectedUnit.nama_unit}</strong>? Unit yang
+              dinonaktifkan tidak akan terlihat oleh non-admin dan publik.
             </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
-                  setShowDeleteModal(false);
+                  setShowDeactivateModal(false);
                   setSelectedUnit(null);
                 }}
                 className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
                 Batal
               </button>
               <button
-                onClick={handleDeleteUnit}
+                onClick={handleDeactivateUnit}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
-                Hapus
+                Nonaktifkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Activate Confirmation Modal */}
+      {showActivateModal && selectedUnit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Aktifkan Kembali Unit
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Aktifkan kembali unit
+              <strong> {selectedUnit.nama_unit}</strong> sehingga terlihat oleh
+              pengguna.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowActivateModal(false);
+                  setSelectedUnit(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+                Batal
+              </button>
+              <button
+                onClick={handleActivateUnit}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                Aktifkan
               </button>
             </div>
           </div>

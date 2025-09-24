@@ -190,6 +190,7 @@ const Register = () => {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               placeholder="Masukkan nama lengkap"
               required
+              autoComplete="off"
             />
           </div>
 
@@ -208,6 +209,7 @@ const Register = () => {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               placeholder="nama@email.com"
               required
+              autoComplete="off"
             />
           </div>
 
@@ -226,6 +228,7 @@ const Register = () => {
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               placeholder="Masukkan posisi/jabatan"
               required
+              autoComplete="off"
             />
           </div>
 
@@ -271,6 +274,7 @@ const Register = () => {
                 className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 placeholder="Masukkan password"
                 required
+                autoComplete="off"
               />
               <button
                 type="button"
@@ -301,6 +305,7 @@ const Register = () => {
                 className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 placeholder="Konfirmasi password"
                 required
+                autoComplete="off"
               />
               <button
                 type="button"

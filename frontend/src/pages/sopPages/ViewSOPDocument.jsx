@@ -11,7 +11,12 @@ import {
 } from "../../services/flowchartApi.jsx";
 // import revisionRequestApi from "../../services/revisionRequestApi"; // DINONAKTIFKAN SEMENTARA
 import "../../App.css";
-import { dateFormatter } from "../../utils/dateFormatter";
+// dateFormatter no longer used directly; using centralized helpers instead
+import {
+  formatTanggalPembuatanFromSop,
+  formatTanggalRevisiFromSop,
+  formatTanggalEfektifFromSop,
+} from "../../utils/sopDateHelpers.jsx";
 
 import Notification from "../../components/Notification";
 import RevisionRequestModal from "../../components/RevisionRequestModal";
@@ -97,6 +102,8 @@ const ViewSOPDocument = () => {
   const isRenderingRef = useRef(false);
   const renderTimeoutRef = useRef(null);
   const [flowchartExecutors, setFlowchartExecutors] = useState([]);
+  // Guard to avoid duplicate fetch/logging in development (React StrictMode double invoke)
+  const hasFetchedRef = useRef(false);
 
   // Revision request states
   const [showRevisionModal, setShowRevisionModal] = useState(false);
@@ -192,6 +199,8 @@ const ViewSOPDocument = () => {
 
   useEffect(() => {
     const fetchAllSopData = async () => {
+      if (hasFetchedRef.current) return;
+      hasFetchedRef.current = true;
       if (!id) {
         setError("ID dokumen tidak valid");
         setLoading(false);
@@ -721,9 +730,7 @@ const ViewSOPDocument = () => {
                           Tanggal Pembuatan:
                         </span>
                         <span className="text-right">
-                          {sopData?.approval_date
-                            ? dateFormatter(sopData?.approval_date) || "-"
-                            : "-"}
+                          {formatTanggalPembuatanFromSop(sopData)}
                         </span>
                       </div>
 
@@ -732,9 +739,7 @@ const ViewSOPDocument = () => {
                           Tanggal Revisi:
                         </span>
                         <span className=" text-right">
-                          {sopData?.revision_date
-                            ? dateFormatter(sopData.revision_date)
-                            : "Belum ada revisi"}
+                          {formatTanggalRevisiFromSop(sopData)}
                         </span>
                       </div>
 
@@ -743,16 +748,7 @@ const ViewSOPDocument = () => {
                           Tanggal Efektif:
                         </span>
                         <span className=" text-right">
-                          {/* Tampilkan tanggal efektif hanya jika SOP sudah disahkan */}
-                          {sopData?.approval_date &&
-                          (sopData?.status === "published" ||
-                            sopData?.status === "unpublished") &&
-                          sopData?.review_status === "approved"
-                            ? dateFormatter(
-                                sopData?.effective_date ||
-                                  sopData?.sop_applicable
-                              )
-                            : "Belum ditetapkan"}
+                          {formatTanggalEfektifFromSop(sopData)}
                         </span>
                       </div>
 

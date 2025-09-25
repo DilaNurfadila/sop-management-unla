@@ -433,24 +433,31 @@ exports.publishDoc = async (req, res) => {
       }
     }
 
-    // Generate QR code untuk bukti pengesahan SOP
+    // Pastikan checksum QR untuk bukti pengesahan SOP tersedia (tanpa menyimpan gambar base64 ke DB)
     try {
       const pool = require("../config/db");
-      const qrResult = await QRCodeService.generateForApprovedSOP(
-        req.params.id,
-        pool
+      // Cek apakah qr_checksum sudah ada
+      const [qrRows] = await pool.execute(
+        "SELECT qr_checksum FROM sop_documents WHERE id = ?",
+        [req.params.id]
       );
 
-      // Simpan QR code base64 ke database
-      const updateQRQuery = `
-        UPDATE sop_documents 
-        SET qr_code_url = ? 
-        WHERE id = ?
-      `;
-      await pool.execute(updateQRQuery, [
-        qrResult.qr_code_base64,
-        req.params.id,
-      ]);
+      const alreadyHasChecksum =
+        Array.isArray(qrRows) && qrRows[0] && qrRows[0].qr_checksum;
+
+      if (!alreadyHasChecksum) {
+        // Generate checksum untuk dokumen ini (akan fallback jika belum approved)
+        const { checksum } = await QRCodeService.generateChecksumForApprovedSOP(
+          req.params.id,
+          pool
+        );
+
+        // Simpan checksum ke database
+        await pool.execute(
+          "UPDATE sop_documents SET qr_checksum = ? WHERE id = ?",
+          [checksum, req.params.id]
+        );
+      }
     } catch (qrError) {
       console.error("Error generating QR code:", qrError);
       // QR code generation error tidak menggagalkan proses publish
@@ -469,6 +476,15 @@ exports.publishDoc = async (req, res) => {
       req,
       { id: req.params.id }
     );
+
+    // Kirim response sukses agar frontend bisa menutup modal dan refresh daftar
+    return res.status(200).json({
+      message: "SOP document published successfully",
+      status: "published",
+      visibility:
+        req.body?.public_visibility || updatedDoc?.public_visibility || null,
+      updatedDoc,
+    });
   } catch (error) {
     // Handle error dan kirim response error
     res.status(400).json({ message: error.message });

@@ -1,3 +1,7 @@
+/**
+ * File: routes/sopCreatorRoutes.js
+ * Ringkasan: Rute admin untuk penugasan penyusunan SOP, termasuk daftar user unit, create assignment, list, update status, delete.
+ */
 const express = require("express");
 const router = express.Router();
 const sopCreatorController = require("../controllers/sopCreatorController");

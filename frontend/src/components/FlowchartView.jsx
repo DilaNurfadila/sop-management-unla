@@ -1,3 +1,9 @@
+/**
+ * Component: FlowchartView
+ *
+ * Editor/Viewer flowchart SOP berbasis Mermaid.js dan grid/tabular inputs.
+ * Integrasi penuh CRUD item/kolom/SOP serta assign person.
+ */
 import { useState, useEffect } from "react";
 import mermaid from "mermaid";
 import {

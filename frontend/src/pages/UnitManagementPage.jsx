@@ -229,7 +229,7 @@ const UnitManagementPage = () => {
               <strong className="font-bold">Akses Ditolak!</strong>
               <span className="block sm:inline">
                 {" "}
-                Hanya admin penuh yang dapat mengakses halaman Pengelolaan Unit.
+                Halaman Pengelolaan Unit hanya tersedia bagi pengguna tertentu.
               </span>
             </div>
           </div>

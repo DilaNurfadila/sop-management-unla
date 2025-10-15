@@ -1,3 +1,7 @@
+/**
+ * File: routes/authRoutes.js
+ * Ringkasan: Rute autentikasi & sesi: register, login, logout, forgot/reset password, current user.
+ */
 const express = require("express");
 const router = express.Router();
 const authController = require("../controllers/authController");

@@ -89,20 +89,6 @@ const Profile = () => {
     }
   };
 
-  // Fungsi untuk mendapatkan warna badge role
-  const getRoleBadgeColor = (role) => {
-    switch (role) {
-      case "admin":
-        return "bg-red-100 text-red-800";
-      case "admin_unit":
-        return "bg-blue-100 text-blue-800";
-      case "user":
-        return "bg-green-100 text-green-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-4xl mx-auto px-4">
@@ -184,22 +170,6 @@ const Profile = () => {
               </label>
               <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800">
                 {user?.position || "Jabatan tidak tersedia"}
-              </div>
-            </div>
-
-            {/* Role */}
-            <div className="space-y-2">
-              <label className="flex items-center text-sm font-medium text-gray-700">
-                <FiMapPin className="mr-2" />
-                Role Sistem
-              </label>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800">
-                <span
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleBadgeColor(
-                    user?.role
-                  )}`}>
-                  {getRoleLabel(user?.role)}
-                </span>
               </div>
             </div>
           </div>

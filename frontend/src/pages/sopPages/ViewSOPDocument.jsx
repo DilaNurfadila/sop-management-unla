@@ -9,9 +9,9 @@ import {
   getCols as getColsApi,
   getSops as getSopsApi,
 } from "../../services/flowchartApi.jsx";
-// import revisionRequestApi from "../../services/revisionRequestApi"; // DINONAKTIFKAN SEMENTARA
+
 import "../../App.css";
-// dateFormatter no longer used directly; using centralized helpers instead
+
 import {
   formatTanggalPembuatanFromSop,
   formatTanggalRevisiFromSop,
@@ -19,8 +19,7 @@ import {
 } from "../../utils/sopDateHelpers.jsx";
 
 import Notification from "../../components/Notification";
-import RevisionRequestModal from "../../components/RevisionRequestModal";
-import RevisionRequestHistory from "../../components/RevisionRequestHistory";
+
 import {
   FiArrowLeft,
   FiFileText,
@@ -102,13 +101,7 @@ const ViewSOPDocument = () => {
   const isRenderingRef = useRef(false);
   const renderTimeoutRef = useRef(null);
   const [flowchartExecutors, setFlowchartExecutors] = useState([]);
-  // Guard to avoid duplicate fetch/logging in development (React StrictMode double invoke)
   const hasFetchedRef = useRef(false);
-
-  // Revision request states
-  const [showRevisionModal, setShowRevisionModal] = useState(false);
-  const [showRevisionHistory, setShowRevisionHistory] = useState(false);
-  // const [revisionHistory, setRevisionHistory] = useState([]); // DINONAKTIFKAN SEMENTARA
 
   const roleColors = useMemo(
     () => [
@@ -160,43 +153,6 @@ const ViewSOPDocument = () => {
     };
   }, []);
 
-  // Fetch revision history for this SOP
-  const fetchRevisionHistory = useCallback(async () => {
-    if (!id) return;
-
-    try {
-      // Set empty defaults
-      // setRevisionHistory([]); // DINONAKTIFKAN SEMENTARA
-      // no-op
-      /*
-      const history = await revisionRequestApi.getRevisionRequestHistory(id);
-
-      // Ensure history is always an array
-      const historyArray = Array.isArray(history) ? history : [];
-      setRevisionHistory(historyArray);
-
-      // Find the latest approved revision request
-      const approvedRevisions = historyArray.filter(
-        (req) => req.status === "approved"
-      );
-      if (approvedRevisions.length > 0) {
-        // Sort by updated_at descending to get the latest
-        const latestApproved = approvedRevisions.sort(
-          (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
-        )[0];
-  // no-op
-      } else {
-  // no-op
-      }
-      */
-    } catch (error) {
-      console.error("Error fetching revision history:", error);
-      // Set empty array on error
-      // setRevisionHistory([]); // DINONAKTIFKAN SEMENTARA
-      // no-op
-    }
-  }, [id]);
-
   useEffect(() => {
     const fetchAllSopData = async () => {
       if (hasFetchedRef.current) return;
@@ -209,22 +165,24 @@ const ViewSOPDocument = () => {
       try {
         setLoading(true);
 
-        // Coba ambil data SOP dengan public endpoint dulu (untuk published SOP)
+        // Pada route privat (/sop/view/:id), prioritaskan endpoint terautentikasi untuk menghindari 403 noise
+        // Jika akses terautentikasi gagal (mis. 403/404), barulah coba endpoint publik (untuk dokumen yang dipublikasi)
         let contentResponse;
         try {
-          contentResponse = await getPublishedSopContent(id);
-        } catch (publicError) {
-          console.log(
-            "Public endpoint failed, trying authenticated endpoint...",
-            publicError.message
-          );
-          // Jika gagal dengan public endpoint, coba dengan authenticated endpoint
+          contentResponse = await getSopContent(id);
+        } catch (authError) {
+          // Opsional: hanya fallback ke publik untuk 403/404
+          const status = authError?.response?.status;
           try {
-            contentResponse = await getSopContent(id);
-          } catch (authError) {
-            console.error("Both endpoints failed:", { publicError, authError });
+            contentResponse = await getPublishedSopContent(id);
+          } catch (publicError) {
+            // Laporkan ringkas tanpa spam console
+            console.error("Gagal memuat konten SOP:", {
+              authStatus: status,
+              publicMessage: publicError?.message,
+            });
             throw new Error(
-              "Tidak dapat mengakses konten SOP. Pastikan Anda memiliki akses ke dokumen ini."
+              "Tidak dapat mengakses konten SOP. Pastikan Anda memiliki akses atau dokumen sudah dipublikasi."
             );
           }
         }
@@ -271,9 +229,6 @@ const ViewSOPDocument = () => {
         });
 
         setSelectedSops(initialSops);
-
-        // Fetch revision history after main data is loaded - DINONAKTIFKAN SEMENTARA
-        // await fetchRevisionHistory();
       } catch (err) {
         console.error("Error fetching SOP data:", err);
         setError(err.message || "Gagal memuat data SOP. Silakan coba lagi.");
@@ -282,7 +237,7 @@ const ViewSOPDocument = () => {
       }
     };
     fetchAllSopData();
-  }, [id, fetchRevisionHistory]);
+  }, [id]);
 
   const generateMermaidFlowchart = useCallback(() => {
     if (items.length === 0 || cols.length === 0) {
@@ -645,25 +600,7 @@ const ViewSOPDocument = () => {
               Detail Dokumen SOP
             </h1>
           </div>
-          <div className="flex-1 flex justify-end space-x-2">
-            {/* Tombol untuk mengajukan revisi */}
-            {sopData?.status === "published" && (
-              <button
-                onClick={() => setShowRevisionModal(true)}
-                className="flex items-center px-3 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors duration-200">
-                <FiEdit className="h-4 w-4 mr-2" />
-                <span className="font-medium">Ajukan Revisi</span>
-              </button>
-            )}
-
-            {/* Tombol untuk melihat riwayat revisi */}
-            <button
-              onClick={() => setShowRevisionHistory(!showRevisionHistory)}
-              className="flex items-center px-3 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors duration-200">
-              <FiList className="h-4 w-4 mr-2" />
-              <span className="font-medium">Riwayat Revisi</span>
-            </button>
-          </div>
+          <div className="flex-1 flex justify-end space-x-2"></div>
         </div>
       </header>
       {/* Bagian SOP Info dengan ukuran standar */}
@@ -1065,30 +1002,10 @@ const ViewSOPDocument = () => {
           </div>
         </div>
 
-        {/* Revision Request History - tampilkan jika showRevisionHistory true */}
-        {showRevisionHistory && (
-          <div className="mt-6">
-            <div className="bg-white rounded-lg shadow-md">
-              <RevisionRequestHistory sopId={id} />
-            </div>
-          </div>
-        )}
+        {/* Riwayat Revisi dipindahkan ke halaman /docs */}
       </div>
 
-      {/* Revision Request Modal */}
-      <RevisionRequestModal
-        isOpen={showRevisionModal}
-        onClose={() => setShowRevisionModal(false)}
-        sopId={id}
-        sopTitle={sopData?.title || "Dokumen SOP"}
-        onRequestSubmitted={() => {
-          fetchRevisionHistory(); // Refresh history setelah mengajukan permintaan
-          setNotification({
-            type: "success",
-            message: "Permintaan revisi berhasil diajukan!",
-          });
-        }}
-      />
+      {/* Ajukan Revisi dan Riwayat Revisi dihapus dari halaman ini */}
 
       {/* Notification */}
       {notification && (

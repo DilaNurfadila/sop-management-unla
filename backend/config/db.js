@@ -1,3 +1,12 @@
+/**
+ * Config: db
+ *
+ * Inisialisasi koneksi database (mysql2/promise).
+ * Catatan keamanan: kredensial DB diambil dari environment variable (.env), bukan hardcode.
+ */
+/**
+ * db.js — Koneksi MySQL (pool) untuk digunakan oleh model/controller
+ */
 // Import mysql2 dengan promise support untuk async/await
 const mysql = require("mysql2/promise");
 // Load environment variables dari .env file

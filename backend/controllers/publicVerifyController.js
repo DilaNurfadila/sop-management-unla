@@ -1,3 +1,8 @@
+/**
+ * File: publicVerifyController.js
+ * Ringkasan: Endpoint publik untuk verifikasi dokumen SOP melalui QR checksum.
+ * - Menampilkan halaman HTML statis dengan status verifikasi dan meta dokumen
+ */
 const PublicVerify = require("../models/PublicVerify");
 
 exports.verifySopByChecksum = async (req, res) => {

@@ -1,3 +1,10 @@
+/**
+ * File: archiveController.js
+ * Ringkasan: Mengelola arsip dokumen SOP:
+ * - Melihat semua arsip & statistiknya
+ * - Arsipkan dokumen aktif dengan alasan, dan pulihkan kembali (restore)
+ * - Mencatat aktivitas (audit trail)
+ */
 // Mengimpor model SopArchive untuk operasi database arsip dokumen
 const SopArchive = require("../models/SopArchive");
 // Mengimpor model ActivityLog untuk logging aktivitas

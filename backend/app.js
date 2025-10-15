@@ -1,16 +1,8 @@
 /**
- * app.js — Entry point aplikasi Express untuk Sistem Manajemen SOP UNLA
- *
- * Tanggung jawab file ini:
- * - Inisialisasi instance Express
- * - Registrasi middleware global (cookies, CORS, JSON body parser)
- * - Mount semua route module (tanpa logika bisnis di sini)
+ * app.js — Entry point Express
+ * - Inisialisasi Express + middleware global (cookie, CORS, JSON)
+ * - Mount routes (auth, users, docs, review, dll)
  * - Menjalankan HTTP server
- *
- * Catatan arsitektur:
- * - Semua handler/logic ada di folder routes/ dan controllers/ (bukan di app.js)
- * - Konfigurasi DB ada di config/db.js dan diakses oleh controller/service terkait
- * - Endpoint publik verifikasi QR dipisah di routes/publicVerifyRoutes.js (tanpa auth)
  */
 // Import Express framework untuk web server
 const express = require("express");
@@ -73,8 +65,6 @@ app.use("/api/health", healthRoutes);
 app.use("/api/kpi", kpiRoutes);
 // Endpoint publik verifikasi QR (tanpa auth), dipasang di root agar URL ringkas untuk QR scanner
 app.use("/", publicVerifyRoutes);
-
-// Catatan: route publik & health check dipindahkan ke module terdedikasi (tidak menumpuk di app.js)
 
 // Mulai server HTTP
 const PORT = process.env.PORT || 5000;

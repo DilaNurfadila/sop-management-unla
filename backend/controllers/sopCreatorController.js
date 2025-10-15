@@ -1,7 +1,18 @@
+/**
+ * File: sopCreatorController.js
+ * Ringkasan: Kelola penugasan penyusunan SOP dan peran reviewer/approver:
+ * - Menyeleksi user menurut role admin/admin_unit
+ * - Membuat penugasan (create/revise) beserta reviewer/approver dan due date
+ * - Melihat penugasan untuk admin/assignee, memperbarui status, dan menghapus
+ * - Email notifikasi penugasan (best-effort)
+ */
 // Import models
 const User = require("../models/User");
 const SopCreatorAssignment = require("../models/SopCreatorAssignment");
 const SopDoc = require("../models/SopDoc");
+const Unit = require("../models/Unit");
+const ActivityLog = require("../models/ActivityLog");
+const { sendAssignmentNotificationEmail } = require("../config/emailService");
 
 /**
  * Controller untuk mengambil daftar pengguna berdasarkan role admin
@@ -171,6 +182,96 @@ exports.assignSopCreator = async (req, res) => {
 
     const result = await assignment.save();
 
+    // Activity log (best-effort)
+    try {
+      await ActivityLog.logUserActivity(
+        req.user.id,
+        req.user.name || "",
+        req.user.role || "",
+        "CREATE",
+        "ASSIGNMENT",
+        `Membuat penugasan ${taskType} SOP untuk ${targetUser.name} sebagai Penyusun (Reviewer: ${reviewerUser.name}, Pengesah: ${approverUser.name})`,
+        req,
+        result.id,
+        "sop_creator_assignment"
+      );
+    } catch (e) {}
+
+    // Kirim email notifikasi (best-effort, non-blocking)
+    const frontendUrl = process.env.FRONTEND_URL;
+    // Get unit scope name if available (best-effort)
+    let unitScopeName = undefined;
+    try {
+      if (unit_scope) {
+        const unitInfo = await Unit.findById(unit_scope);
+        unitScopeName = unitInfo?.nama_unit;
+      }
+    } catch (e) {}
+
+    const safeSend = async (payload) => {
+      if (!payload?.to) return; // skip if no recipient email
+      try {
+        await sendAssignmentNotificationEmail(payload);
+      } catch (e) {
+        // Do not block on email failure
+      }
+    };
+
+    // Prepare target SOP meta once if revise
+    let targetSopData = undefined;
+    if (taskType === "revise" && sop_to_revise) {
+      try {
+        const rev = await SopDoc.findById(sop_to_revise);
+        if (rev) {
+          targetSopData = {
+            title: rev.title,
+            sop_code: rev.sop_code,
+            version: rev.version,
+          };
+        }
+      } catch (e) {}
+    }
+
+    // Notify creator
+    safeSend({
+      to: targetUser.email,
+      userName: targetUser.name,
+      role: "creator",
+      assignedByName: req.user.name || "Admin",
+      notes,
+      dueDate: processedDueDate || undefined,
+      taskType,
+      targetSop: targetSopData,
+      unitScopeName,
+      frontendUrl,
+    });
+
+    // Notify reviewer
+    safeSend({
+      to: reviewerUser.email,
+      userName: reviewerUser.name,
+      role: "reviewer",
+      assignedByName: req.user.name || "Admin",
+      taskType,
+      targetSop: targetSopData,
+      unitScopeName,
+      frontendUrl,
+    });
+
+    // Notify approver (skip if approver is the assigner)
+    if (approverUser.id !== assignedBy) {
+      safeSend({
+        to: approverUser.email,
+        userName: approverUser.name,
+        role: "approver",
+        assignedByName: req.user.name || "Admin",
+        taskType,
+        targetSop: targetSopData,
+        unitScopeName,
+        frontendUrl,
+      });
+    }
+
     // Kirim response sukses
     res.status(201).json({
       message: `SOP ${taskType} assignment created successfully`,
@@ -275,6 +376,21 @@ exports.updateAssignmentStatus = async (req, res) => {
 
     // Update status
     await SopCreatorAssignment.updateStatus(id, status, response);
+
+    // Activity log (best-effort)
+    try {
+      await ActivityLog.logUserActivity(
+        req.user.id,
+        req.user.name || "",
+        req.user.role || "",
+        "UPDATE",
+        "ASSIGNMENT",
+        `Update status penugasan menjadi '${status}'`,
+        req,
+        assignment.id,
+        "sop_creator_assignment"
+      );
+    } catch (e) {}
 
     // Kirim response sukses
     res.status(200).json({

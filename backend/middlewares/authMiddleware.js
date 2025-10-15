@@ -1,3 +1,14 @@
+/**
+ * Middleware: authMiddleware
+ *
+ * Memvalidasi sesi pengguna:
+ * - Membaca JWT dari cookie httpOnly
+ * - Memverifikasi token dan memuat user ke req.user
+ * - Mengembalikan 401 jika tidak valid/expired
+ *
+ * Catatan:
+ * - Dipakai sebelum endpoint privat (melindungi data internal)
+ */
 // Import jsonwebtoken untuk verifikasi JWT token
 const jwt = require("jsonwebtoken");
 // Import model User untuk mengambil data lengkap user
@@ -14,17 +25,8 @@ const Auth = require("../models/Auth");
  * @param {Function} next - Next function untuk melanjutkan ke middleware berikutnya
  */
 exports.authenticate = async (req, res, next) => {
-  // Tentukan nama cookie berdasarkan origin
+  // Gunakan nama cookie tunggal untuk token
   let cookieName = "token";
-
-  if (req.headers.origin) {
-    const origin = req.headers.origin;
-    if (origin.includes(":5174")) {
-      cookieName = "token_5174";
-    } else if (origin.includes(":5173")) {
-      cookieName = "token_5173";
-    }
-  }
 
   // Ambil token dari cookie HTTP-only berdasarkan nama cookie yang sesuai
   // Pastikan req.cookies ada sebelum mengakses property
@@ -55,12 +57,21 @@ exports.authenticate = async (req, res, next) => {
           } catch (e) {}
           // Bersihkan cookie token
           try {
-            res.clearCookie("token", {
+            // Clear token cookie (match the cookie name based on origin) and session_id
+            res.clearCookie(cookieName, {
               httpOnly: true,
               secure: process.env.NODE_ENV === "production",
               sameSite: "strict",
               path: "/",
             });
+            try {
+              res.clearCookie("session_id", {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === "production",
+                sameSite: "strict",
+                path: "/",
+              });
+            } catch (e) {}
           } catch (e) {}
           return res
             .status(403)
@@ -93,12 +104,21 @@ exports.authenticate = async (req, res, next) => {
 
       // Pastikan cookie token dibersihkan dari browser
       try {
-        res.clearCookie("token", {
+        // Clear token cookie (match the cookie name based on origin) and session_id when expired
+        res.clearCookie(cookieName, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
           path: "/",
         });
+        try {
+          res.clearCookie("session_id", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            path: "/",
+          });
+        } catch (e) {}
       } catch (e) {
         // noop
       }
@@ -121,12 +141,21 @@ exports.authenticate = async (req, res, next) => {
 
     // Bersihkan cookie jika token tidak valid
     try {
-      res.clearCookie("token", {
+      // Clear token cookie (match the cookie name based on origin) and session_id when invalid
+      res.clearCookie(cookieName, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         path: "/",
       });
+      try {
+        res.clearCookie("session_id", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/",
+        });
+      } catch (e) {}
     } catch (e) {
       // noop
     }

@@ -1,3 +1,7 @@
+/**
+ * File: routes/healthRoutes.js
+ * Ringkasan: Rute health check sederhana (konektivitas database).
+ */
 const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");

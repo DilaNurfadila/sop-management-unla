@@ -1,3 +1,12 @@
+/**
+ * Model: Feedback
+ *
+ * Menangani data umpan balik (feedback) pengguna publik/terautentik terkait SOP.
+ *
+ * Catatan:
+ * - Mendukung pembuatan, listing, moderasi, dan balasan (reply via email di controller).
+ * - Jaga sanitasi input untuk mencegah konten berbahaya pada kolom teks.
+ */
 const pool = require("../config/db");
 
 /**

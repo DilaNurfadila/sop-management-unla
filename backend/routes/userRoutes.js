@@ -1,3 +1,7 @@
+/**
+ * File: routes/userRoutes.js
+ * Ringkasan: Rute pengguna: profil & password (protected), dan rute manajemen admin/superadmin (CRUD, role, status, stats).
+ */
 const express = require("express");
 const router = express.Router();
 const userController = require("../controllers/userController");

@@ -1,3 +1,9 @@
+/**
+ * Model: PublicVerify
+ *
+ * Menyimpan atau menyediakan akses data yang dibutuhkan untuk halaman verifikasi publik
+ * (scan QR, cek checksum/identitas SOP yang telah disetujui/published).
+ */
 const pool = require("../config/db");
 
 class PublicVerify {

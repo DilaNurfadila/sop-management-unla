@@ -1,3 +1,18 @@
+/**
+ * Service: authClient
+ *
+ * Tanggung jawab:
+ * - Bootstrap auth di frontend: axios response interceptors (auto-logout 401)
+ * - Manajemen sesi: decode JWT, schedule auto-logout, session watcher (ping /auth/me)
+ * - State lokal: simpan/bersihkan data user/token di storage
+ * - Navigasi aman: forceLogout dengan redirect ke halaman login publik
+ *
+ * API utama:
+ * - decodeJwt(token) -> payload|null
+ * - scheduleAutoLogout(token), startSessionExpiryWatcher(), stopSessionExpiryWatcher()
+ * - installAuthInterceptors()
+ * - clearFrontendAuth(), forceLogout(redirectTo)
+ */
 // Centralized auth helpers: token decoding, auto-logout scheduling, and axios interceptors
 import axios from "axios";
 
@@ -26,7 +41,29 @@ export const decodeJwt = (token) => {
 };
 
 let logoutTimerId = null;
+let sessionWatchId = null;
 let isLoggingOut = false; // guard to prevent repeated logout
+
+// Determine if current path is a public (unauthenticated) route
+const isPublicRoutePath = (path) => {
+  try {
+    if (typeof path !== "string") return false;
+    // Common public auth pages
+    const normalized = path.toLowerCase();
+    return (
+      normalized === "/" ||
+      normalized.startsWith("/auth/") ||
+      normalized === "/auth" ||
+      normalized === "/login" ||
+      normalized === "/register" ||
+      normalized === "/reset-password" ||
+      // public SOP viewer routes
+      normalized.startsWith("/sop/public/")
+    );
+  } catch {
+    return false;
+  }
+};
 
 // Clear all local frontend auth data (sessionStorage, localStorage, and any cached data)
 export const clearFrontendAuth = () => {
@@ -40,7 +77,7 @@ export const clearFrontendAuth = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("userData"); // Ini yang digunakan di Login.jsx
-    localStorage.removeItem("notificationSettings"); // Clear settings juga
+    // notificationSettings dihapus (fitur notifikasi frontend sudah dihapus)
 
     // Clear semua keys yang mengandung token atau user
     Object.keys(localStorage).forEach((key) => {
@@ -78,6 +115,11 @@ export const forceLogout = async (redirectTo = "/auth/login") => {
   if (logoutTimerId) {
     clearTimeout(logoutTimerId);
     logoutTimerId = null;
+  }
+  // stop session watcher
+  if (sessionWatchId) {
+    clearInterval(sessionWatchId);
+    sessionWatchId = null;
   }
 
   // Use fetch to avoid axios interceptors and prevent 401 loops
@@ -124,6 +166,47 @@ export const scheduleAutoLogout = (token) => {
   }, msUntilExpiry + 500); // small buffer
 };
 
+// Periodically check session validity to auto-logout on expiry even when idle
+export const startSessionExpiryWatcher = (intervalMs = 120000) => {
+  if (sessionWatchId) return; // already started
+  const ping = async () => {
+    if (isLoggingOut) return;
+    // Skip ping on public pages to avoid 401 noise after logout
+    try {
+      if (
+        typeof window !== "undefined" &&
+        isPublicRoutePath(window.location.pathname)
+      ) {
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      const res = await fetch(`${AUTH_API}/me`, {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (res.status === 401) {
+        await forceLogout();
+      }
+    } catch (e) {
+      void e; // ignore network errors; next tick will retry
+    }
+  };
+  // first ping soon after boot to catch already-expired sessions
+  setTimeout(ping, 1000);
+  sessionWatchId = setInterval(ping, intervalMs);
+};
+
+export const stopSessionExpiryWatcher = () => {
+  if (sessionWatchId) {
+    clearInterval(sessionWatchId);
+    sessionWatchId = null;
+  }
+};
+
 // Install a single global axios response interceptor to auto-logout on 401 from protected endpoints
 let interceptorInstalled = false;
 export const installAuthInterceptors = () => {
@@ -153,6 +236,8 @@ export const bootstrapAuthClient = () => {
   // Token akan dicek otomatis oleh backend melalui cookie
   // Hanya perlu install interceptors
   installAuthInterceptors();
+  // Mulai watcher agar auto-logout tetap berjalan saat idle
+  startSessionExpiryWatcher();
 };
 
 export default {
@@ -162,4 +247,6 @@ export default {
   scheduleAutoLogout,
   installAuthInterceptors,
   bootstrapAuthClient,
+  startSessionExpiryWatcher,
+  stopSessionExpiryWatcher,
 };

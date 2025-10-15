@@ -1,3 +1,9 @@
+/**
+ * Hook: useModal
+ *
+ * State helper untuk menampilkan/menutup modal.
+ * Kontrak: () => { isOpen: boolean, open: fn, close: fn, toggle: fn }
+ */
 import { useState } from "react";
 
 /**

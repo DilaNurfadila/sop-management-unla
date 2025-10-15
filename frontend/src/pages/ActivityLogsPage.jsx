@@ -197,7 +197,7 @@ const ActivityLogsPage = () => {
             <strong className="font-bold">Akses Ditolak!</strong>
             <span className="block sm:inline">
               {" "}
-              Hanya superadmin yang dapat mengakses halaman Riwayat Aktivitas.
+              Halaman Riwayat Aktivitas hanya tersedia bagi pengguna tertentu.
             </span>
           </div>
         </div>

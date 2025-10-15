@@ -1,8 +1,22 @@
+/**
+ * File: reviewController.js
+ * Ringkasan: Mengelola alur pemeriksaan & pengesahan SOP (review workflow):
+ * - Mendapatkan daftar SOP menunggu review (berdasarkan role & unit)
+ * - Mengambil detail SOP untuk review + riwayat
+ * - Approve (Reviewer → Approver) termasuk validasi tanggal efektif dan penomoran SOP
+ * - Reject (kembalikan untuk revisi) + catatan reviu
+ * - Kirim email notifikasi pada transisi tertentu (best-effort)
+ * - Generate checksum QR saat fully approved
+ * Keamanan:
+ * - Otorisasi berdasarkan role user (Reviewer/Approver/admin/admin_unit)
+ */
 const pool = require("../config/db");
 const { logDocumentActivity } = require("./activityLogController");
 const { generateSopCode } = require("../utils/sopCodeGenerator");
 const SopCreatorAssignment = require("../models/SopCreatorAssignment");
 const QRCodeService = require("../services/qrCodeService");
+const { sendSopWorkflowNotificationEmail } = require("../config/emailService");
+// In-app notifications removed
 
 /**
  * Controller untuk mengambil SOP yang menunggu review oleh user yang login
@@ -29,21 +43,31 @@ exports.getPendingReviews = async (req, res) => {
           creator.name as creator_name,
           unit_scope.nama_unit as unit_scope_name,
           creator_unit.nama_unit as unit_name,
-          CASE 
-            WHEN d.review_status = 'submitted_for_review' THEN 'Reviewer'
-            WHEN d.review_status = 'reviewer_approved' THEN 'Approver'
-            ELSE NULL
-          END as my_role
+          COALESCE(ar_me.role,
+            CASE 
+              WHEN d.review_status = 'submitted_for_review' THEN 'Reviewer'
+              WHEN d.review_status = 'reviewer_approved' THEN 'Approver'
+              ELSE NULL
+            END
+          ) as my_role
         FROM sop_documents d
         LEFT JOIN sop_approval_roles creator_role ON d.id = creator_role.sop_doc_id AND creator_role.role = 'Creator'
         LEFT JOIN users creator ON creator_role.user_id = creator.id
         LEFT JOIN units creator_unit ON creator.unit = creator_unit.id
         LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
         LEFT JOIN units unit_scope ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope.id
+        -- Ambil peran user login pada SOP ini (prioritaskan Approver jika user punya dua peran)
+        LEFT JOIN (
+          SELECT sar.sop_doc_id,
+                 IF(SUM(sar.role = 'Approver') > 0, 'Approver', IF(SUM(sar.role = 'Reviewer') > 0, 'Reviewer', NULL)) AS role
+          FROM sop_approval_roles sar
+          WHERE sar.user_id = ?
+          GROUP BY sar.sop_doc_id
+        ) ar_me ON ar_me.sop_doc_id = d.id
         WHERE d.review_status IN ('submitted_for_review','reviewer_approved')
         ORDER BY d.updated_at DESC
       `;
-      params = [];
+      params = [userId];
     } else if (userRole === "admin_unit") {
       // Admin unit: hanya untuk lingkup unitnya, tanpa harus ditugaskan
       query = `
@@ -57,22 +81,32 @@ exports.getPendingReviews = async (req, res) => {
           creator.name as creator_name,
           unit_scope.nama_unit as unit_scope_name,
           creator_unit.nama_unit as unit_name,
-          CASE 
-            WHEN d.review_status = 'submitted_for_review' THEN 'Reviewer'
-            WHEN d.review_status = 'reviewer_approved' THEN 'Approver'
-            ELSE NULL
-          END as my_role
+          COALESCE(ar_me.role,
+            CASE 
+              WHEN d.review_status = 'submitted_for_review' THEN 'Reviewer'
+              WHEN d.review_status = 'reviewer_approved' THEN 'Approver'
+              ELSE NULL
+            END
+          ) as my_role
         FROM sop_documents d
         LEFT JOIN sop_approval_roles creator_role ON d.id = creator_role.sop_doc_id AND creator_role.role = 'Creator'
         LEFT JOIN users creator ON creator_role.user_id = creator.id
         LEFT JOIN units creator_unit ON creator.unit = creator_unit.id
         LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
         LEFT JOIN units unit_scope ON COALESCE(d.unit_scope, sca.unit_scope) = unit_scope.id
+        -- Ambil peran user login pada SOP ini (prioritaskan Approver jika user punya dua peran)
+        LEFT JOIN (
+          SELECT sar.sop_doc_id,
+                 IF(SUM(sar.role = 'Approver') > 0, 'Approver', IF(SUM(sar.role = 'Reviewer') > 0, 'Reviewer', NULL)) AS role
+          FROM sop_approval_roles sar
+          WHERE sar.user_id = ?
+          GROUP BY sar.sop_doc_id
+        ) ar_me ON ar_me.sop_doc_id = d.id
         WHERE COALESCE(d.unit_scope, sca.unit_scope) = ?
           AND d.review_status IN ('submitted_for_review','reviewer_approved')
         ORDER BY d.updated_at DESC
       `;
-      params = [req.user.unit];
+      params = [userId, req.user.unit];
     } else {
       // User biasa lihat SOP yang perlu dia review berdasarkan role
       query = `
@@ -471,6 +505,54 @@ exports.approveSop = async (req, res) => {
         { id: id }
       );
 
+      // Notifikasi alur (best-effort):
+      try {
+        // Ambil meta dokumen dan peran
+        const [docMetaRows] = await connection.query(
+          `SELECT d.title, d.sop_code, d.version,
+                  COALESCE(d.unit_scope, sca.unit_scope) AS unit_scope_id,
+                  u.nama_unit AS unit_scope_name
+           FROM sop_documents d
+           LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+           LEFT JOIN units u ON COALESCE(d.unit_scope, sca.unit_scope) = u.id
+           WHERE d.id = ?`,
+          [id]
+        );
+        const meta = docMetaRows && docMetaRows[0] ? docMetaRows[0] : {};
+
+        if (userRole === "Reviewer" && newStatus === "reviewer_approved") {
+          // Notify Approver: ready_for_approval
+          const [approverRows] = await connection.query(
+            `SELECT u.id, u.name, u.email
+             FROM sop_approval_roles ar
+             JOIN users u ON ar.user_id = u.id
+             WHERE ar.sop_doc_id = ? AND ar.role = 'Approver' LIMIT 1`,
+            [id]
+          );
+          const approver =
+            approverRows && approverRows[0] ? approverRows[0] : null;
+          if (approver && approver.email) {
+            await sendSopWorkflowNotificationEmail({
+              to: approver.email,
+              userName: approver.name,
+              eventType: "ready_for_approval",
+              docTitle: meta.title,
+              sopCode: meta.sop_code,
+              version: meta.version,
+              unitScopeName: meta.unit_scope_name,
+              requesterName: req.user?.name,
+              frontendUrl: process.env.FRONTEND_URL,
+            });
+            // In-app notification removed
+          }
+        } else if (userRole === "Approver" && newStatus === "approved") {
+          // Optional: we could notify the creator that SOP was fully approved; skipping unless requested
+          // In-app notification removed
+        }
+      } catch (e) {
+        // ignore email errors
+      }
+
       // Generate QR code untuk bukti pengesahan jika SOP sudah fully approved (disahkan oleh Approver)
       if (userRole === "Approver" && newStatus === "approved") {
         try {
@@ -496,6 +578,45 @@ exports.approveSop = async (req, res) => {
           );
           console.error("❌ QR Error details:", qrError.stack);
           // QR checksum generation error tidak menggagalkan proses approval
+        }
+
+        // (Internal notification disahkan dihapus)
+
+        // Kirim email ke Creator & Reviewer bahwa SOP disahkan (best-effort)
+        try {
+          const { sendSopApprovedEmail } = require("../config/emailService");
+          // Ambil email creator & reviewer
+          const [stakeRows] = await connection.query(
+            `SELECT ar.role, u.email, u.name FROM sop_approval_roles ar
+               JOIN users u ON ar.user_id = u.id
+               WHERE ar.sop_doc_id = ? AND ar.role IN ('Creator','Reviewer')`,
+            [id]
+          );
+          const recipients = stakeRows.map((r) => r.email).filter(Boolean);
+          if (recipients.length) {
+            // Ambil meta tambahan untuk email
+            const [metaRows] = await connection.query(
+              `SELECT d.title, d.sop_code, d.version, COALESCE(d.unit_scope, sca.unit_scope) AS unit_scope_id,
+                        u.nama_unit AS unit_scope_name, d.sop_applicable
+                 FROM sop_documents d
+                 LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+                 LEFT JOIN units u ON COALESCE(d.unit_scope, sca.unit_scope) = u.id
+                 WHERE d.id = ?`,
+              [id]
+            );
+            const meta = metaRows && metaRows[0] ? metaRows[0] : {};
+            await sendSopApprovedEmail({
+              recipients,
+              docTitle: meta.title || sop.title || "SOP",
+              sopCode: meta.sop_code,
+              version: meta.version,
+              unitScopeName: meta.unit_scope_name,
+              effectiveDate: meta.sop_applicable,
+              frontendUrl: process.env.FRONTEND_URL,
+            });
+          }
+        } catch (e) {
+          // abaikan error email
         }
       }
 
@@ -582,6 +703,47 @@ exports.rejectSop = async (req, res) => {
         req,
         { id: id }
       );
+
+      // Notifikasi ke Creator tentang revisi (best-effort)
+      try {
+        // Ambil meta dokumen dan creator
+        const [docMetaRows] = await connection.query(
+          `SELECT d.title, d.sop_code, d.version,
+                  COALESCE(d.unit_scope, sca.unit_scope) AS unit_scope_id,
+                  u.nama_unit AS unit_scope_name
+           FROM sop_documents d
+           LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+           LEFT JOIN units u ON COALESCE(d.unit_scope, sca.unit_scope) = u.id
+           WHERE d.id = ?`,
+          [id]
+        );
+        const meta = docMetaRows && docMetaRows[0] ? docMetaRows[0] : {};
+        const [creatorRows] = await connection.query(
+          `SELECT u.id, u.name, u.email
+           FROM sop_approval_roles ar
+           JOIN users u ON ar.user_id = u.id
+           WHERE ar.sop_doc_id = ? AND ar.role = 'Creator' LIMIT 1`,
+          [id]
+        );
+        const creator = creatorRows && creatorRows[0] ? creatorRows[0] : null;
+        if (creator && creator.email) {
+          await sendSopWorkflowNotificationEmail({
+            to: creator.email,
+            userName: creator.name,
+            eventType: "needs_revision",
+            docTitle: meta.title,
+            sopCode: meta.sop_code,
+            version: meta.version,
+            unitScopeName: meta.unit_scope_name,
+            requesterName: req.user?.name,
+            revisionNote: note,
+            frontendUrl: process.env.FRONTEND_URL,
+          });
+          // In-app notification removed
+        }
+      } catch (e) {
+        // ignore email errors
+      }
 
       await connection.commit();
 

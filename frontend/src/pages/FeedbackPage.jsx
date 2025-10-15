@@ -1,3 +1,9 @@
+/**
+ * Page: FeedbackPage
+ *
+ * Wrapper halaman untuk dashboard feedback (user vs admin).
+ * Menampilkan komponen berbeda berdasarkan role.
+ */
 import FeedbackDashboard from "../components/FeedbackDashboard";
 import AdminFeedbackManagement from "../components/AdminFeedbackManagement";
 import { useAdminRole } from "../hooks/useAdminRole";

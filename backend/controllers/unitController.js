@@ -1,3 +1,22 @@
+/**
+ * Unit Controller
+ *
+ * Tanggung jawab:
+ * - CRUD data Unit (create, read, update)
+ * - Soft deactivate/activate unit dengan prefix "disabled:" pada kode_unit
+ * - Pencarian dan statistik unit
+ * - Logging aktivitas ke ActivityLog (kategori: UNIT)
+ *
+ * Aturan akses:
+ * - getAllUnits/getUnitById/searchUnits: semua user; non-admin tidak melihat unit yang dinonaktifkan
+ * - create/update/deactivate/activate: admin saja
+ * - getAllUnitsPublic: tanpa autentikasi, hanya unit aktif
+ *
+ * Catatan perilaku:
+ * - Nonaktif: menambahkan prefix "disabled:" pada kode_unit (tidak menghapus data)
+ * - Aktivasi ulang: menghapus prefix, dicek konflik kode terlebih dahulu
+ * - Logging tidak mengganggu flow utama jika gagal (try/catch)
+ */
 const Unit = require("../models/Unit");
 const ActivityLog = require("../models/ActivityLog");
 

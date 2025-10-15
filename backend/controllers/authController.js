@@ -1,3 +1,17 @@
+/**
+ * File: authController.js
+ * Ringkasan: Controller untuk autentikasi dan manajemen sesi pengguna:
+ * - Registrasi, Login, Logout
+ * - Forgot password (kirim email) & Reset password
+ * - Mendapatkan user saat ini (berdasarkan token cookie)
+ * Ketergantungan & efek samping:
+ * - Membaca/menulis cookie HTTP untuk JWT (httpOnly)
+ * - Akses DB via model User/Auth/PasswordReset
+ * - Kirim email reset password via emailService (best-effort)
+ * Keamanan:
+ * - JWT ditandatangani dengan JWT_SECRET
+ * - Cookie httpOnly + sameSite; secure di production
+ */
 // Import model Auth untuk operasi database authentication
 const Auth = require("../models/Auth");
 // Import model User untuk operasi user
@@ -72,8 +86,8 @@ const logAuthActivity = async (
  */
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
+    { id: user.id, email: user.email, role: user.role }, // payload minimal
+    process.env.JWT_SECRET, // kunci rahasia
     { expiresIn: "1h" } // Token berlaku 1 jam
   );
 };
@@ -85,18 +99,8 @@ const generateToken = (user) => {
  * @param {Object} req - Request object untuk mendapatkan origin
  */
 const setTokenCookie = (res, token, req = null) => {
-  // Tentukan nama cookie berdasarkan origin untuk menghindari konflik antar port
+  // Gunakan nama cookie tunggal untuk token
   let cookieName = "token";
-
-  if (req && req.headers.origin) {
-    const origin = req.headers.origin;
-    if (origin.includes(":5174")) {
-      cookieName = "token_5174";
-    } else if (origin.includes(":5173")) {
-      cookieName = "token_5173";
-    }
-    // Default tetap "token" untuk origin lainnya
-  }
 
   // Konfigurasi cookie yang berbeda untuk development dan production
   const isProduction = process.env.NODE_ENV === "production";
@@ -130,7 +134,7 @@ const setTokenCookie = (res, token, req = null) => {
       : {}),
   };
 
-  // Log cookie configuration di development
+  // Log cookie configuration di development (disengaja kosong)
   if (!isProduction) {
   }
 
@@ -147,17 +151,8 @@ const setTokenCookie = (res, token, req = null) => {
  * @returns {string} - Nama cookie yang di-clear
  */
 const clearTokenCookie = (res, req = null) => {
-  // Tentukan nama cookie berdasarkan origin (sama dengan setTokenCookie)
+  // Gunakan nama cookie tunggal untuk token
   let cookieName = "token";
-
-  if (req && req.headers.origin) {
-    const origin = req.headers.origin;
-    if (origin.includes(":5174")) {
-      cookieName = "token_5174";
-    } else if (origin.includes(":5173")) {
-      cookieName = "token_5173";
-    }
-  }
 
   // Konfigurasi cookie yang sama dengan setTokenCookie untuk clear yang proper
   const isProduction = process.env.NODE_ENV === "production";
@@ -187,11 +182,15 @@ const clearTokenCookie = (res, req = null) => {
       : {}),
   };
 
-  // Log cookie clearing di development
+  // Log cookie clearing di development (disengaja kosong)
   if (!isProduction) {
   }
 
   res.clearCookie(cookieName, clearOptions);
+  // Also clear optional session cookie if present
+  try {
+    res.clearCookie("session_id", clearOptions);
+  } catch (e) {}
 
   return cookieName;
 };

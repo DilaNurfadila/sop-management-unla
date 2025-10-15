@@ -1,3 +1,10 @@
+/**
+ * Middleware: adminMiddleware
+ *
+ * Memastikan pengguna yang mengakses endpoint adalah admin.
+ * - Mengandalkan req.user yang diisi oleh authMiddleware.
+ * - Mengembalikan 403 jika role bukan admin.
+ */
 // Middleware khusus untuk admin unit role validation
 
 /**

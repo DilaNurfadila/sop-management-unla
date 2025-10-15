@@ -1,3 +1,8 @@
+/**
+ * Page: Login
+ *
+ * Halaman untuk autentikasi pengguna (email/password). Mengatur redirect pasca-login.
+ */
 // Import React hooks untuk state management dan lifecycle
 import { useState, useEffect } from "react";
 // Import React Router hooks untuk navigasi dan location

@@ -1,3 +1,8 @@
+/**
+ * Page: Dashboard
+ *
+ * Ringkasan metrik dan akses cepat ke fitur utama (berbeda sesuai role).
+ */
 // Catatan: useLocation di-comment karena tidak digunakan saat ini
 // import { useLocation } from "react-router-dom";
 

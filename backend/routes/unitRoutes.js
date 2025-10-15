@@ -1,3 +1,7 @@
+/**
+ * File: routes/unitRoutes.js
+ * Ringkasan: Rute manajemen unit kerja: list/search/get (protected), stats (admin), create/update/activate/deactivate (admin).
+ */
 const express = require("express");
 const router = express.Router();
 const unitController = require("../controllers/unitController");

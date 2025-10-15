@@ -1,3 +1,9 @@
+/**
+ * Component: AdminFeedbackManagement
+ *
+ * Panel admin untuk moderasi dan membalas feedback pengguna.
+ * Fitur: list, approve/reject, balas via email, statistik ringan.
+ */
 import React, { useState, useEffect } from "react";
 import {
   FiStar,

@@ -1,3 +1,11 @@
+/**
+ * Model: SopActivity
+ *
+ * Menyimpan daftar aktivitas/prosedur pada SOP (untuk flowchart/visualisasi).
+ *
+ * Catatan:
+ * - Berelasi dengan SOP dan dapat diurutkan sesuai langkah kerja.
+ */
 const pool = require("../config/db");
 
 /**

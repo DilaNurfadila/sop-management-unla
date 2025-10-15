@@ -1,3 +1,7 @@
+/**
+ * File: routes/activityLogRoutes.js
+ * Ringkasan: Rute admin (superadmin) untuk audit trail: list, detail, stats, search, cleanup, serta aktivitas user.
+ */
 const express = require("express");
 const router = express.Router();
 const activityLogController = require("../controllers/activityLogController");

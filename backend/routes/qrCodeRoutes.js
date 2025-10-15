@@ -1,3 +1,7 @@
+/**
+ * File: routes/qrCodeRoutes.js
+ * Ringkasan: Rute terkait QR code: validasi, verifikasi publik, generate gambar QR, dan debug JSON.
+ */
 const express = require("express");
 const router = express.Router();
 const QRCodeService = require("../services/qrCodeService");

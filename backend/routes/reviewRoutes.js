@@ -1,3 +1,7 @@
+/**
+ * File: routes/reviewRoutes.js
+ * Ringkasan: Rute untuk workflow review & pengesahan SOP (pending, detail, approve, reject, history, revision notes).
+ */
 const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middlewares/authMiddleware");

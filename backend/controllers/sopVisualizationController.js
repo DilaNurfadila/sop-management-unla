@@ -1,3 +1,9 @@
+/**
+ * File: sopVisualizationController.js
+ * Ringkasan: Kelola data visualisasi langkah SOP (sop_visualization):
+ * - Ambil per dokumen SOP, buat, update (by id), hapus
+ * - Data meliputi pelaksana, kelengkapan, waktu, output, dan lompatan langkah
+ */
 const db = require("../config/db");
 const { validationResult } = require("express-validator");
 
@@ -65,13 +71,11 @@ exports.create = async (req, res) => {
       ]
     );
 
-    res
-      .status(201)
-      .json({
-        success: true,
-        id: result.insertId,
-        message: "Visualization created successfully",
-      });
+    res.status(201).json({
+      success: true,
+      id: result.insertId,
+      message: "Visualization created successfully",
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

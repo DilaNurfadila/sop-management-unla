@@ -1,3 +1,7 @@
+/**
+ * File: routes/flowchartRoutes.js
+ * Ringkasan: Rute untuk aktivitas SOP, pelaksana (responsible person), dan visualisasi alur; tersedia varian publik dan protected.
+ */
 // flowchartRoutes.js
 const express = require("express");
 const router = express.Router();

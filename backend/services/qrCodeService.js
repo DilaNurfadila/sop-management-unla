@@ -1,3 +1,11 @@
+/**
+ * Service: qrCodeService
+ *
+ * Menyediakan utilitas untuk menghasilkan QR code/URL dan checksum terkait SOP.
+ * Kontrak:
+ * - generateForSop(doc): menghasilkan data QR dan checksum untuk verifikasi publik
+ * - getPublicUrl(checksum): membentuk URL verifikasi publik
+ */
 const QRCode = require("qrcode");
 const crypto = require("crypto");
 

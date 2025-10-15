@@ -2,7 +2,6 @@
 import { useState, useRef, useEffect } from "react";
 // Import icon dari react-icons untuk UI navbar
 import {
-  FiBell,
   FiChevronDown,
   FiUser,
   FiSettings,
@@ -17,6 +16,7 @@ import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";
 // Import komponen modal custom
 import CustomModal from "./CustomModal";
 import { useModal } from "../hooks/useModal";
+// In-app notifications removed
 
 /**
  * Komponen Navbar - Navigation bar untuk dashboard
@@ -28,6 +28,7 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
   const [isOpen, setIsOpen] = useState(false);
   // Ref untuk handle klik di luar dropdown
   const dropdownRef = useRef(null);
+  // In-app notifications removed
 
   // Initialize modal hook
   const {
@@ -49,6 +50,7 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
         // Tutup dropdown jika klik di luar
         setIsOpen(false);
       }
+      // in-app notif removed
     };
 
     // Tambah event listener untuk mouse click
@@ -58,6 +60,8 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // in-app notif removed
 
   // Ambil data user dari localStorage dengan aman (tanpa auto-redirect)
   const decryptedUser = getSafeUserDataNoRedirect();
@@ -130,11 +134,7 @@ const Navbar = ({ sidebarOpen, setSidebarOpen }) => {
       {/* Right: actions cluster */}
       <div className="flex items-center space-x-3 sm:space-x-4">
         {/* Tombol Notifikasi */}
-        <button className="p-2 rounded-full hover:bg-gray-100 relative">
-          <FiBell size={20} className="text-gray-600" />
-          {/* Indicator badge untuk notifikasi baru */}
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-        </button>
+        {/* Notifikasi dihapus */}
 
         {/* Profile Dropdown Menu */}
         <div className="relative" ref={dropdownRef}>

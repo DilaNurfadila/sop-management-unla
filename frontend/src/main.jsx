@@ -9,6 +9,14 @@ import App from "./App.jsx";
 // Initialize auth client on app startup (interceptors + token expiry scheduling)
 import { bootstrapAuthClient } from "./services/authClient";
 
+/**
+ * Entry: main.jsx
+ *
+ * Tanggung jawab:
+ * - Bootstrap auth client (axios interceptors, token refresh scheduling)
+ * - Render <App/> menggunakan React 18 createRoot
+ * - Memuat stylesheet global index.css
+ */
 // Create root element dan render aplikasi
 // Menggunakan React 18+ createRoot API untuk performa yang lebih baik
 bootstrapAuthClient();

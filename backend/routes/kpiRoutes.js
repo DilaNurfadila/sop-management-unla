@@ -1,3 +1,7 @@
+/**
+ * File: routes/kpiRoutes.js
+ * Ringkasan: Rute ringkasan KPI untuk dashboard admin/superadmin.
+ */
 const express = require("express");
 const router = express.Router();
 const { authenticate, authorize } = require("../middlewares/authMiddleware");

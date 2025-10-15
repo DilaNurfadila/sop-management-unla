@@ -1,3 +1,7 @@
+/**
+ * File: routes/sopVisualizationRoutes.js
+ * Ringkasan: Rute untuk manajemen data sop_visualization per dokumen SOP (get/create/update/delete) dengan validasi input.
+ */
 const express = require("express");
 const router = express.Router();
 const sopVisualizationController = require("../controllers/sopVisualizationController");

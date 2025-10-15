@@ -1,3 +1,10 @@
+/**
+ * File: feedbackController.js
+ * Ringkasan: Kelola feedback SOP dan balasan oleh admin/admin_unit:
+ * - Buat, ambil per-SOP, ambil semua (dengan info uploader), ubah, hapus
+ * - Statistik rata-rata rating per SOP
+ * - Balas feedback via email (best-effort) + pencatatan aktivitas
+ */
 // Import model Feedback untuk operasi database feedback
 const Feedback = require("../models/Feedback");
 // Import model SopDoc untuk operasi database dokumen SOP
@@ -346,6 +353,8 @@ exports.replyFeedback = async (req, res) => {
       console.error("Error sending email:", emailError);
       // Don't fail the operation if email fails
     }
+
+    // In-app notification removed
 
     // Log activity
     await logFeedbackActivity(

@@ -1,3 +1,12 @@
+/**
+ * Model: PasswordReset
+ *
+ * Mengelola token reset password (pembuatan, validasi, dan kadaluarsa).
+ *
+ * Catatan:
+ * - Token bersifat sensitif dan harus ditangani secara aman.
+ * - Validasi masa berlaku dilakukan pada controller saat pemakaian.
+ */
 const db = require("../config/db");
 
 /**

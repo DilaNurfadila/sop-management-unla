@@ -1,3 +1,11 @@
+/**
+ * Utils: sopCodeGenerator
+ *
+ * Menghasilkan kode SOP unik/terstruktur (mis. berdasarkan unit/tanggal/urutan).
+ * Kontrak:
+ * - generate(unit): mengembalikan string kode SOP baru yang unik
+ * - validate(code): validasi format kode SOP
+ */
 const pool = require("../config/db");
 
 /**

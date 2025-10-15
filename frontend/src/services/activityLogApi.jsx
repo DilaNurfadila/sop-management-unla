@@ -1,3 +1,9 @@
+/**
+ * Service API: activityLogApi
+ *
+ * Endpoint manajemen activity logs: list, detail, search, stats, cleanup.
+ * Catatan: requires auth cookie; admin/superadmin scope untuk operasi tertentu.
+ */
 import axios from "axios";
 
 const API_BASE_URL =

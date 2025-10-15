@@ -114,7 +114,9 @@ const ReviewSOPDocument = () => {
   // Review specific states
   const [actionLoading, setActionLoading] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [showApproveModal, setShowApproveModal] = useState(false); // unified modal
+  const [showApproveModal, setShowApproveModal] = useState(false); // modal khusus pengesah
+  const [showReviewerApproveLoading, setShowReviewerApproveLoading] =
+    useState(false);
   const [rejectData, setRejectData] = useState({ note: "" });
   const [approveData, setApproveData] = useState({
     note: "",
@@ -318,7 +320,30 @@ const ReviewSOPDocument = () => {
 
   // removed reviewer-only & combined approve handlers
 
-  const handleConfirmApprove = async () => {
+  // Hanya untuk reviewer (tanpa tanggal efektif)
+  const handleReviewerApprove = async () => {
+    try {
+      setShowReviewerApproveLoading(true);
+      await api.post(`/review/approve/${id}`, {
+        note: approveData.note,
+        act_as: "Reviewer",
+      });
+      showNotification("SOP disetujui oleh Pemeriksa", "success");
+      // Setelah reviewer menyetujui, arahkan kembali ke dashboard review
+      setTimeout(() => navigate("/review"), 1000);
+    } catch (error) {
+      console.error("Error reviewer approving SOP:", error);
+      showNotification(
+        error.response?.data?.message || "Gagal menyetujui SOP",
+        "error"
+      );
+    } finally {
+      setShowReviewerApproveLoading(false);
+    }
+  };
+
+  // Untuk pengesah (memerlukan tanggal efektif)
+  const handleApproverApprove = async () => {
     if (!approveData.effective_date) {
       showNotification("Tanggal efektif harus diisi", "error");
       return;
@@ -330,12 +355,6 @@ const ReviewSOPDocument = () => {
     }
     try {
       setActionLoading(true);
-      if (sopData.review_status === "submitted_for_review") {
-        await api.post(`/review/approve/${id}`, {
-          note: approveData.note,
-          act_as: "Reviewer",
-        });
-      }
       await api.post(`/review/approve/${id}`, {
         note: approveData.note,
         effective_date: approveData.effective_date,
@@ -345,10 +364,10 @@ const ReviewSOPDocument = () => {
       setShowApproveModal(false);
       setTimeout(() => navigate("/review"), 1500);
     } catch (error) {
-      console.error("Error unified approving SOP:", error);
+      console.error("Error approving SOP:", error);
       showNotification(
         error.response?.data?.message ||
-          "Terjadi kesalahan saat mengesahkan SOP",
+          "Terjadi kesalahan saat pengesahan SOP",
         "error"
       );
     } finally {
@@ -755,17 +774,26 @@ const ReviewSOPDocument = () => {
                   {actionLoading ? "Memproses..." : "Tolak"}
                 </button>
               )}
-              {(isReviewerStage || isApproverStage) &&
-                (isReviewerUser || isApproverUser) && (
-                  <button
-                    onClick={() => setShowApproveModal(true)}
-                    disabled={actionLoading}
-                    className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 transition-colors"
-                    title="Sahkan SOP (jika masih review akan otomatis approve tahap reviewer)">
-                    <FiCheck className="w-4 h-4 mr-2" />
-                    {actionLoading ? "Memproses..." : "Sahkan SOP"}
-                  </button>
-                )}
+              {isReviewerStage && isReviewerUser && (
+                <button
+                  onClick={handleReviewerApprove}
+                  disabled={showReviewerApproveLoading}
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 transition-colors"
+                  title="Setujui SOP sebagai Pemeriksa">
+                  <FiCheck className="w-4 h-4 mr-2" />
+                  {showReviewerApproveLoading ? "Memproses..." : "Setujui SOP"}
+                </button>
+              )}
+              {isApproverStage && isApproverUser && (
+                <button
+                  onClick={() => setShowApproveModal(true)}
+                  disabled={actionLoading}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
+                  title="Sahkan SOP dengan menentukan tanggal efektif">
+                  <FiCheck className="w-4 h-4 mr-2" />
+                  {actionLoading ? "Memproses..." : "Sahkan SOP"}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1258,7 +1286,7 @@ const ReviewSOPDocument = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleConfirmApprove}
+                  onClick={handleApproverApprove}
                   disabled={actionLoading || !approveData.effective_date}
                   className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-medium py-2 px-4 rounded-md transition-colors">
                   {actionLoading ? "Memproses..." : "Sahkan SOP"}

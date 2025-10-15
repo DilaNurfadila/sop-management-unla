@@ -1,3 +1,8 @@
+/**
+ * Component: Navbar
+ *
+ * Navigasi utama aplikasi. Menampilkan link sesuai role/status login.
+ */
 // Import React Router untuk navigasi
 import { Link, useNavigate } from "react-router-dom";
 import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";

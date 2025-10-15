@@ -1,15 +1,22 @@
+/**
+ * Page: AssignmentManagementPage
+ *
+ * Manajemen penugasan penyusun SOP (assign, ubah, batalkan, daftar assignment).
+ */
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   getAssignmentsByAdmin,
   deleteAssignment,
 } from "../../services/sopCreatorApi";
 import Notification from "../../components/Notification";
 import { useAdminPermissions } from "../../hooks/useAdminRole";
-import { FiX, FiSearch } from "react-icons/fi";
+import { FiX, FiSearch, FiEye } from "react-icons/fi";
 
 const AssignmentManagementPage = () => {
+  const navigate = useNavigate();
   // Admin permissions check
-  const { canManageAssignments, userRole } = useAdminPermissions();
+  const { canManageAssignments } = useAdminPermissions();
   // State untuk data
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +57,7 @@ const AssignmentManagementPage = () => {
   const handleDeleteAssignment = async (assignmentId, sopTitle) => {
     if (
       !window.confirm(
-        `Apakah Anda yakin ingin menghapus penugasan "${sopTitle}"?`
+        `Apakah Anda yakin ingin membatalkan penugasan "${sopTitle}"?`
       )
     ) {
       return;
@@ -63,11 +70,11 @@ const AssignmentManagementPage = () => {
       // Refresh data
       await loadAssignments();
 
-      showNotification("Penugasan berhasil dihapus", "success");
+      showNotification("Penugasan berhasil dibatalkan", "success");
     } catch (error) {
       console.error("❌ Error deleting assignment:", error);
       const errorMessage =
-        error.response?.data?.message || "Gagal menghapus penugasan";
+        error.response?.data?.message || "Gagal membatalkan penugasan";
       showNotification(errorMessage, "error");
     } finally {
       setDeleting(null);
@@ -103,10 +110,7 @@ const AssignmentManagementPage = () => {
               Akses Dibatasi
             </h1>
             <p className="text-gray-600 mb-4">
-              Halaman ini hanya dapat diakses oleh Admin Unit.
-            </p>
-            <p className="text-sm text-gray-500">
-              Role Anda: <span className="font-medium">{userRole}</span>
+              Halaman ini hanya dapat diakses oleh Administrator yang berwenang.
             </p>
           </div>
         </div>
@@ -191,13 +195,9 @@ const AssignmentManagementPage = () => {
             <h1 className="text-3xl font-bold text-gray-900">
               Manajemen Penugasan SOP
             </h1>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              Admin Unit
-            </span>
           </div>
           <p className="mt-2 text-gray-600">
-            Kelola dan pantau penugasan pembuatan SOP yang telah Anda buat
-            sebagai admin unit
+            Kelola dan pantau penugasan pembuatan SOP yang telah Anda buat.
           </p>
         </div>
 
@@ -435,21 +435,48 @@ const AssignmentManagementPage = () => {
                           {formatDate(assignment.created_at)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            onClick={() =>
-                              handleDeleteAssignment(
-                                assignment.id,
-                                "tugas pembuatan SOP"
-                              )
-                            }
-                            disabled={deleting === assignment.id}
-                            className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {deleting === assignment.id ? (
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                          {assignment.sop_approved === 1 ? (
+                            assignment.sop_document_id ? (
+                              <button
+                                onClick={() =>
+                                  navigate(
+                                    `/sop/view/${assignment.sop_document_id}`
+                                  )
+                                }
+                                title="Lihat SOP yang sudah disahkan"
+                                aria-label="Lihat SOP yang sudah disahkan"
+                                className="text-blue-600 hover:text-blue-800 p-2 rounded-lg hover:bg-blue-50">
+                                <FiEye />
+                              </button>
                             ) : (
-                              "🗑️ Hapus"
-                            )}
-                          </button>
+                              <button
+                                type="button"
+                                title="SOP sudah disahkan"
+                                aria-label="SOP sudah disahkan"
+                                disabled
+                                className="text-green-700 p-2 rounded-lg opacity-70 cursor-not-allowed">
+                                <FiEye />
+                              </button>
+                            )
+                          ) : (
+                            <button
+                              onClick={() =>
+                                handleDeleteAssignment(
+                                  assignment.id,
+                                  "tugas pembuatan SOP"
+                                )
+                              }
+                              title="Batalkan penugasan"
+                              aria-label="Batalkan penugasan"
+                              disabled={deleting === assignment.id}
+                              className="text-red-600 hover:text-red-900 p-2 rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                              {deleting === assignment.id ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                              ) : (
+                                <FiX />
+                              )}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

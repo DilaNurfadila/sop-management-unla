@@ -1,3 +1,8 @@
+/**
+ * Model: SopResponsiblePerson
+ *
+ * Mencatat penanggung jawab pada aktivitas SOP (role/jabatan dan identitas).
+ */
 const pool = require("../config/db");
 
 /**

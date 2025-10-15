@@ -13,10 +13,8 @@ import {
   FiSave,
   FiLock,
   FiUser,
-  FiBell,
   FiEye,
   FiEyeOff,
-  FiCheck,
   FiX,
   FiUsers,
   FiBriefcase,
@@ -27,8 +25,9 @@ import {
 import Notification from "../components/Notification";
 
 /**
- * Komponen Settings - Halaman pengaturan akun user
- * Menampilkan form untuk edit profile, security, dan notifikasi
+ * Page: Settings
+ *
+ * Halaman pengaturan akun user: profile, keamanan (password), dan preferensi.
  */
 const Settings = () => {
   // State untuk mengatur tab yang aktif
@@ -80,19 +79,10 @@ const Settings = () => {
     confirmPassword: "",
   });
 
-  // State untuk pengaturan notifikasi
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    sopUpdates: true,
-    systemAlerts: true,
-    feedbackNotifications: true,
-  });
-
-  // State untuk loading status
+  // State loading status (notifications removed)
   const [isLoading, setIsLoading] = useState({
     profile: false,
     password: false,
-    notifications: false,
   });
 
   // State untuk menampilkan/menyembunyikan password
@@ -152,18 +142,7 @@ const Settings = () => {
     }
   }, [units]);
 
-  // Fungsi untuk memuat pengaturan notifikasi dari localStorage
-  const loadNotificationSettings = useCallback(() => {
-    try {
-      const savedSettings = localStorage.getItem("notificationSettings");
-      if (savedSettings) {
-        const parsedSettings = JSON.parse(savedSettings);
-        setNotificationSettings(parsedSettings);
-      }
-    } catch (error) {
-      console.error("Error loading notification settings:", error);
-    }
-  }, []);
+  // loadNotificationSettings dihapus (fitur notifikasi frontend dihapus)
 
   // Fungsi untuk menampilkan notifikasi
   const showNotification = (type, message) => {
@@ -329,29 +308,7 @@ const Settings = () => {
     }
   };
 
-  // Fungsi untuk handle perubahan pengaturan notifikasi
-  const handleNotificationChange = async (setting) => {
-    setIsLoading((prev) => ({ ...prev, notifications: true }));
-
-    try {
-      const newSettings = {
-        ...notificationSettings,
-        [setting]: !notificationSettings[setting],
-      };
-
-      setNotificationSettings(newSettings);
-
-      // Simpan pengaturan ke localStorage
-      localStorage.setItem("notificationSettings", JSON.stringify(newSettings));
-
-      showNotification("success", "Pengaturan notifikasi berhasil diperbarui");
-    } catch (error) {
-      console.error("Error updating notification settings:", error);
-      showNotification("error", "Gagal memperbarui pengaturan notifikasi");
-    } finally {
-      setIsLoading((prev) => ({ ...prev, notifications: false }));
-    }
-  };
+  // handleNotificationChange dihapus (fitur notifikasi frontend dihapus)
 
   // Fungsi untuk toggle visibility password
   const togglePasswordVisibility = (field) => {
@@ -364,8 +321,8 @@ const Settings = () => {
   // Fungsi untuk mendapatkan label role dalam bahasa Indonesia
   const getRoleLabel = (role) => {
     const roleLabels = {
-      employee: "Karyawan",
-      writer: "Penulis",
+      user: "Pengguna",
+      admin: "Admin",
       admin_unit: "Admin Unit",
       superadmin: "Super Admin",
     };
@@ -375,8 +332,7 @@ const Settings = () => {
   // Load user data dan notification settings saat komponen dimount
   useEffect(() => {
     loadUserData();
-    loadNotificationSettings();
-  }, [loadUserData, loadNotificationSettings]);
+  }, [loadUserData]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -407,7 +363,6 @@ const Settings = () => {
               {[
                 { id: "profile", label: "Profil", icon: FiUser },
                 { id: "security", label: "Keamanan", icon: FiLock },
-                { id: "notifications", label: "Notifikasi", icon: FiBell },
               ].map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -742,150 +697,7 @@ const Settings = () => {
             </div>
           )}
 
-          {/* Notifications Tab */}
-          {activeTab === "notifications" && (
-            <div className="p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                Pengaturan Notifikasi
-              </h2>
-
-              <div className="space-y-4">
-                {/* Email Notifications */}
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-50 rounded-lg">
-                      <FiMail className="text-blue-600" size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">
-                        Email Notifications
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        Terima notifikasi melalui email
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      handleNotificationChange("emailNotifications")
-                    }
-                    disabled={isLoading.notifications}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      notificationSettings.emailNotifications
-                        ? "bg-blue-600"
-                        : "bg-gray-200"
-                    }`}>
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        notificationSettings.emailNotifications
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* SOP Updates */}
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-green-50 rounded-lg">
-                      <FiCheck className="text-green-600" size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">Update SOP</h3>
-                      <p className="text-sm text-gray-500">
-                        Notifikasi saat ada update dokumen SOP
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleNotificationChange("sopUpdates")}
-                    disabled={isLoading.notifications}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      notificationSettings.sopUpdates
-                        ? "bg-blue-600"
-                        : "bg-gray-200"
-                    }`}>
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        notificationSettings.sopUpdates
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* System Alerts */}
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-yellow-50 rounded-lg">
-                      <FiBell className="text-yellow-600" size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">
-                        Sistem Alert
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        Notifikasi penting dari sistem
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleNotificationChange("systemAlerts")}
-                    disabled={isLoading.notifications}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      notificationSettings.systemAlerts
-                        ? "bg-blue-600"
-                        : "bg-gray-200"
-                    }`}>
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        notificationSettings.systemAlerts
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Feedback Notifications */}
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-purple-50 rounded-lg">
-                      <FiUser className="text-purple-600" size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">
-                        Notifikasi Feedback
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        Notifikasi saat ada feedback baru
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      handleNotificationChange("feedbackNotifications")
-                    }
-                    disabled={isLoading.notifications}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      notificationSettings.feedbackNotifications
-                        ? "bg-blue-600"
-                        : "bg-gray-200"
-                    }`}>
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        notificationSettings.feedbackNotifications
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Notifications Tab dihapus */}
         </div>
       </div>
     </div>

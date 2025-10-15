@@ -1,3 +1,7 @@
+/**
+ * File: routes/publicVerifyRoutes.js
+ * Ringkasan: Rute publik untuk verifikasi SOP melalui checksum QR (tanpa autentikasi).
+ */
 const express = require("express");
 const router = express.Router();
 const publicVerifyController = require("../controllers/publicVerifyController");

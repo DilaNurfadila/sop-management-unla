@@ -1,3 +1,12 @@
+/**
+ * Model: SopDoc
+ *
+ * Entitas utama dokumen SOP (judul, konten, status, unit, approval metadata, checksum, dsb.).
+ *
+ * Catatan:
+ * - Menyediakan operasi CRUD, query filter (published/public), dan utilitas terkait publikasi.
+ * - Dipakai luas oleh controller dokumen, review, visualisasi, dan arsip.
+ */
 // Import konfigurasi database connection pool
 const pool = require("../config/db");
 const {
@@ -238,11 +247,14 @@ class SopDoc {
         unit_scope_tbl.nama_unit AS unit_scope_name,
         d.public_visibility,
         ar.user_id AS creator_id,
+        ar.approval_date AS creator_approval_date,
         reviewer.id AS reviewer_id,
         reviewer.name AS reviewer_name,
+        reviewer_role.approval_date AS reviewer_approval_date,
         approver.id AS approver_id,
         approver.name AS approver_name,
         approver.position AS approver_position,
+        approver_role.approval_date AS approver_approval_date,
         d.qr_checksum,
         d.approved_by,
         d.approval_date AS approval_date

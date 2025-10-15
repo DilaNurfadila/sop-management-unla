@@ -1,3 +1,11 @@
+/**
+ * Model: SopVisualization
+ *
+ * Menyimpan data visualisasi SOP (mis. node/edge untuk flowchart atau representasi grafis lainnya).
+ *
+ * Catatan:
+ * - Berelasi dengan SOP dan komponen UI yang menampilkan alur kerja.
+ */
 const db = require("../config/db");
 
 class SopVisualization {

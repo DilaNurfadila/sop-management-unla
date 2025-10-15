@@ -1,3 +1,15 @@
+/**
+ * Model: ActivityLog
+ *
+ * Menyimpan jejak aktivitas pengguna dan sistem (audit trail).
+ * Fitur utama:
+ * - logUserActivity(userId, userName, userRole, action, category, description, req, targetId?, targetType?)
+ * - Query daftar log, detail, pencarian, dan statistik (bergantung implementasi file ini)
+ *
+ * Catatan:
+ * - Digunakan oleh berbagai controller (UNIT, SOP, ARCHIVE, REVIEW, dll.)
+ * - Hindari melempar error dari logging agar tidak mengganggu flow utama
+ */
 // Mengimpor konfigurasi database untuk koneksi MySQL
 const db = require("../config/db");
 

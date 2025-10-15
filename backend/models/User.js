@@ -1,3 +1,12 @@
+/**
+ * Model: User
+ *
+ * Menyimpan data pengguna (identitas, email, password hash, role, unit, dsb.).
+ *
+ * Catatan:
+ * - Hindari mengembalikan password hash dari metode publik.
+ * - Digunakan oleh auth/user controller untuk berbagai operasi akun.
+ */
 // Import koneksi database dari config
 const pool = require("../config/db");
 

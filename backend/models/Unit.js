@@ -1,3 +1,12 @@
+/**
+ * Model: Unit
+ *
+ * Mewakili entitas Unit/Departemen pada organisasi (nomor_unit, kode_unit, nama_unit).
+ *
+ * Catatan:
+ * - Menyediakan operasi CRUD, pencarian, dan statistik.
+ * - Prefix "disabled:" pada kode_unit menandakan unit non-aktif.
+ */
 const db = require("../config/db");
 
 /**

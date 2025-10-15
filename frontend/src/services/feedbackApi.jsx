@@ -1,3 +1,8 @@
+/**
+ * Service API: feedbackApi
+ *
+ * Endpoint feedback publik/admin: create, list, reply, stats.
+ */
 // Import axios untuk HTTP requests
 import axios from "axios";
 import { installAuthInterceptors } from "./authClient";

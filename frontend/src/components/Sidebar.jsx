@@ -1,3 +1,8 @@
+/**
+ * Component: Sidebar
+ *
+ * Navigasi samping (dashboard). Menyesuaikan item berdasarkan role/user.
+ */
 // Import icon dari react-icons untuk UI sidebar
 import {
   FiHome,
@@ -190,7 +195,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         )}
 
         {/* Menu Review SOP - Untuk reviewer / admin / admin_unit / superadmin */}
-        {(userData?.role === "user" || isAdminUnit) && (
+        {(userData?.role === "user" || isAdminUnit || isAdmin) && (
           <Link
             to="/review"
             className={`flex items-center w-full p-3 my-1 ${

@@ -1,3 +1,13 @@
+/**
+ * Model: Auth
+ *
+ * Bertanggung jawab terhadap operasi autentikasi/otorisasi yang berhubungan
+ * dengan data user (mis. verifikasi kredensial, token reset, dll).
+ *
+ * Catatan:
+ * - Dipakai oleh authController untuk login/register/forgot/reset password.
+ * - Pastikan tidak mengekspos data sensitif (password hash) ke luar model.
+ */
 const pool = require("../config/db");
 
 /**

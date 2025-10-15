@@ -1,3 +1,6 @@
+/**
+ * kpiController — Ringkasan KPI dashboard (SOP, feedback, users, SLA, activity)
+ */
 const pool = require("../config/db");
 const SopArchive = require("../models/SopArchive");
 const ActivityLog = require("../models/ActivityLog");

@@ -89,8 +89,8 @@ const SearchableDropdown = ({
                 Tidak ada hasil
               </li>
             )}
-            {filtered.map((opt) => (
-              <li key={opt.value}>
+            {filtered.map((opt, idx) => (
+              <li key={`${String(opt.value)}-${idx}`}>
                 <button
                   type="button"
                   onClick={() => {
@@ -352,16 +352,28 @@ const AssignSopCreatorPage = () => {
       };
     });
 
-  const reviewerOptions = [
+  // Deduplicate combined options by value to avoid duplicate keys in list rendering
+  const dedupeByValue = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const item of arr) {
+      const key = String(item?.value);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    return out;
+  };
+  const reviewerOptions = dedupeByValue([
     { value: "", label: "-- Pilih Pemeriksa --" },
     ...baseUsers,
     ...baseAdmins,
-  ];
-  const approverOptions = [
+  ]);
+  const approverOptions = dedupeByValue([
     { value: "", label: "-- Pilih Pengesah --" },
     ...baseUsers,
     ...baseAdmins,
-  ];
+  ]);
 
   const unitOptions = [
     {
@@ -373,12 +385,24 @@ const AssignSopCreatorPage = () => {
       search: "",
       meta: "",
     },
-    ...units.map((u) => ({
-      value: u.id,
-      label: u.nama_unit || u.unit_name || "(Tanpa Nama)",
-      search: `${u.nama_unit || ""} ${u.kode_unit || ""}`,
-      meta: u.kode_unit || "",
-    })),
+    ...(() => {
+      if (!Array.isArray(units)) return [];
+      const seen = new Set();
+      const arr = [];
+      for (const u of units) {
+        const id = u?.id ?? u?.ID ?? u?.Id;
+        const key = String(id);
+        if (id != null && seen.has(key)) continue;
+        if (id != null) seen.add(key);
+        arr.push({
+          value: id,
+          label: u.nama_unit || u.unit_name || "(Tanpa Nama)",
+          search: `${u.nama_unit || ""} ${u.kode_unit || ""}`,
+          meta: u.kode_unit || "",
+        });
+      }
+      return arr;
+    })(),
   ];
 
   return (
@@ -394,16 +418,7 @@ const AssignSopCreatorPage = () => {
                   : "Tugaskan anggota unit Anda untuk membuat dokumen SOP"}
               </p>
             </div>
-            <div className="bg-blue-50 px-4 py-2 rounded-lg">
-              <p className="text-sm text-blue-700 font-medium">
-                {userRole === "admin" ? "👑 Admin Penuh" : "👤 Admin Unit"}
-              </p>
-              <p className="text-xs text-blue-600">
-                {userRole === "admin"
-                  ? "Akses ke semua unit dan pengguna"
-                  : "Fitur khusus untuk admin unit"}
-              </p>
-            </div>
+            {/* Helper banner removed per request */}
           </div>
         </div>
 

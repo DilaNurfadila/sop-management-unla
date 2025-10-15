@@ -1,6 +1,14 @@
+/**
+ * Service: api
+ *
+ * Axios instance untuk panggilan API ke backend.
+ * Catatan:
+ * - Menggunakan withCredentials untuk cookie-based auth
+ * - Base URL disesuaikan via VITE_API_URL atau default localhost
+ */
 // Import axios untuk HTTP requests
 import axios from "axios";
-import { installAuthInterceptors } from "./authClient";
+import { installAuthInterceptors, forceLogout } from "./authClient";
 
 // Base URL untuk API endpoints dokumen SOP
 const API_URL = "http://localhost:5000/api/docs";
@@ -15,6 +23,22 @@ const api = axios.create({
   baseURL: "http://localhost:5000/api", // Base URL yang lebih general untuk semua endpoints
   withCredentials: true,
 });
+
+// Pasang interceptor juga pada instance `api` agar 401 dari instance ini memicu auto-logout
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url || "";
+    const skip = error?.config?.__skipAuthInterceptor === true;
+    const isLogoutCall =
+      typeof url === "string" && url.includes("/auth/logout");
+    if (status === 401 && !skip && !isLogoutCall) {
+      await forceLogout();
+    }
+    return Promise.reject(error);
+  }
+);
 
 /**
  * Function untuk mengambil semua dokumen SOP
@@ -162,6 +186,18 @@ export const getSopByUserUnit = async () => {
     const response = await api.get("/docs/my-unit");
     return response.data;
   } catch (error) {
+    const status = error?.response?.status;
+    if (status === 401) {
+      // Hard fail: clear session and redirect to login
+      try {
+        const { forceLogout } = await import("./authClient");
+        await forceLogout();
+      } catch (e) {
+        // Log error to aid debugging instead of silently ignoring
+        console.error("forceLogout failed:", e);
+      }
+      throw new Error("Akses ditolak, sesi berakhir. Silakan login kembali.");
+    }
     throw new Error(
       error.response?.data?.message ||
         "Failed to fetch SOP documents by user unit"

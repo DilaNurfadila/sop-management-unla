@@ -1,3 +1,9 @@
+/**
+ * File: activityLogController.js
+ * Ringkasan: Manajemen log aktivitas sistem (AUDIT TRAIL):
+ * - Listing, detail, pencarian, statistik, cleanup log lama, dan aktivitas per user
+ * - Hanya superadmin yang dapat mengakses sebagian besar fungsi admin log
+ */
 const ActivityLog = require("../models/ActivityLog");
 
 /**

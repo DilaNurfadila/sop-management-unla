@@ -1,3 +1,8 @@
+/**
+ * File: routes/docRoutes.js
+ * Ringkasan: Rute REST untuk dokumen SOP (CRUD, konten, publish/unpublish, validasi, submit review).
+ * Keamanan: mayoritas endpoint protected; publik hanya /public/* untuk dokumen yang diizinkan.
+ */
 // Import Express untuk membuat router
 const express = require("express");
 const router = express.Router();

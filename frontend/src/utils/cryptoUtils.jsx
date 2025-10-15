@@ -1,3 +1,9 @@
+/**
+ * Utils: cryptoUtils
+ *
+ * Helper untuk enkripsi/dekripsi ringan data user di localStorage dan helper auth aman.
+ * Kontrak: getSafeUserDataNoRedirect(), setUserData(), clearUserData(), dll.
+ */
 // Import crypto-js untuk dekripsi
 import crypto from "crypto-js";
 

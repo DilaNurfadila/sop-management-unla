@@ -1,5 +1,5 @@
 // Import React hooks untuk state management
-import { useState, useEffect } from "react";
+import { useState } from "react";
 // Import React Router components untuk routing
 import {
   BrowserRouter as Router,
@@ -9,9 +9,6 @@ import {
 } from "react-router-dom";
 // Import global CSS styles
 import "./App.css";
-
-// Import auth client untuk bootstrap authentication
-import { bootstrapAuthClient } from "./services/authClient";
 
 // Import semua page components
 import Dashboard from "./pages/Dashboard";
@@ -46,14 +43,20 @@ import ReviewSopPage from "./pages/review/ReviewSopPage";
 import CreateSOPVizPage from "./pages/sopPages/CreateSOPVizPage";
 import ManageSOPVizPage from "./pages/sopPages/ManageSOPVizPage";
 import FlowchartVisualizationPage from "./pages/sopPages/FlowchartVisualizationPage";
-import RevisionRequestManagement from "./pages/RevisionRequestManagement";
 import ProtectedRoute from "./components/ProtectedRoute";
-// Auth checks rely on HTTP-only cookies; token is not stored client-side
 import { getSafeUserDataNoRedirect } from "./utils/cryptoUtils.jsx";
 
 /**
- * Komponen App - Root component aplikasi SOP Management
- * Mengatur routing, authentication, dan layout utama
+ * Component: App
+ *
+ * Peran:
+ * - Root component aplikasi SOP Management
+ * - Mengatur routing, proteksi halaman, dan layout utama
+ * - Memuat halaman publik (home/published) dan private (dashboard/admin dll.)
+ *
+ * Catatan:
+ * - Gunakan ProtectedRoute untuk endpoint yang butuh autentikasi/role tertentu
+ * - Sidebar state disesuaikan dengan ukuran layar saat initial render
  */
 function App() {
   // State untuk kontrol sidebar (open/close)
@@ -65,11 +68,6 @@ function App() {
   });
   // State untuk tracking halaman aktif saat ini
   const [currentPage, setCurrentPage] = useState("dashboard");
-
-  // Bootstrap auth client saat app load
-  useEffect(() => {
-    bootstrapAuthClient();
-  }, []);
 
   /**
    * Komponen PrivateRoute - Higher Order Component untuk protected routes
@@ -212,13 +210,7 @@ function App() {
           />
           <Route
             path="/revision-requests"
-            element={
-              <PrivateRoute>
-                <ProtectedRoute allowedRoles={["admin"]}>
-                  <RevisionRequestManagement />
-                </ProtectedRoute>
-              </PrivateRoute>
-            }
+            element={<Navigate to="/dashboard" replace />}
           />
           <Route
             path="/sop-flowchart"

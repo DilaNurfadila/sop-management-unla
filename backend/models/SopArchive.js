@@ -1,3 +1,11 @@
+/**
+ * Model: SopArchive
+ *
+ * Menyimpan arsip SOP beserta alasan pengarsipan dan metadata terkait.
+ *
+ * Catatan:
+ * - Digunakan saat memindahkan SOP dari status aktif/published ke arsip.
+ */
 // Import koneksi database dari config
 const pool = require("../config/db");
 

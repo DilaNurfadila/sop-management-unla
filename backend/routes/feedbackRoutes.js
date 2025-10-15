@@ -1,3 +1,7 @@
+/**
+ * File: routes/feedbackRoutes.js
+ * Ringkasan: Rute publik untuk kirim feedback & ambil per SOP; rute protected untuk admin (list/update/delete/reply).
+ */
 const express = require("express");
 const router = express.Router();
 const feedbackController = require("../controllers/feedbackController");

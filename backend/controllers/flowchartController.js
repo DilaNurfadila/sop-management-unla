@@ -1,4 +1,8 @@
-// controllers/flowchartController.js
+// File: flowchartController.js
+// Ringkasan: Operasi CRUD untuk komponen visual alur SOP:
+// - sop_activities: langkah-langkah prosedur (create/read/update/delete)
+// - sop_responsible_person: pelaksana yang bertanggung jawab
+// - sop_visualization: detail visualisasi langkah (kelengkapan, waktu, output)
 const db = require("../config/db");
 
 // ===============================

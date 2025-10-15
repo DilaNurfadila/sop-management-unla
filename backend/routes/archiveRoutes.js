@@ -1,3 +1,7 @@
+/**
+ * File: routes/archiveRoutes.js
+ * Ringkasan: Rute untuk melihat arsip, statistik arsip, mengarsipkan dokumen, dan restore dokumen.
+ */
 const express = require("express");
 const router = express.Router();
 const archiveController = require("../controllers/archiveController");

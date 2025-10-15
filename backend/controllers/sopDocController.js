@@ -1,13 +1,31 @@
+/**
+ * File: sopDocController.js
+ * Ringkasan: Controller untuk semua operasi terkait dokumen SOP:
+ * - CRUD dokumen SOP (create, read, update, delete → dipindah ke arsip, bukan hard delete)
+ * - Submit SOP untuk pemeriksaan (review workflow)
+ * - Publish/unpublish SOP (termasuk pengaturan visibilitas publik dan QR checksum)
+ * - Akses konten SOP (private/public) dengan aturan visibilitas dan peran
+ * - Validasi kelengkapan SOP sebelum diajukan untuk pemeriksaan
+ * - Pencatatan aktivitas pengguna (ActivityLog) untuk audit trail
+ * Ketergantungan & efek samping:
+ * - Akses DB melalui model dan query langsung (pool)
+ * - Mengirim email via emailService untuk event workflow (best-effort)
+ * - Generate checksum QR untuk SOP yang disahkan (tanpa menyimpan gambar)
+ * - Menggunakan JWT untuk mengambil profil pengguna di salah satu endpoint
+ * Catatan keamanan:
+ * - Endpoint tertentu membutuhkan autentikasi dan otorisasi (role admin/admin_unit/creator)
+ * - Endpoint publik memiliki filter visibilitas yang ketat
+ */
 // Import model SopDoc untuk operasi database dokumen SOP
-const SopDoc = require("../models/SopDoc");
+const SopDoc = require("../models/SopDoc"); // Model utama untuk data dokumen SOP
 // Import model SopArchive untuk operasi arsip dokumen
-const SopArchive = require("../models/SopArchive");
+const SopArchive = require("../models/SopArchive"); // Untuk memindahkan dokumen yang dihapus ke tabel arsip
 // Import model ActivityLog untuk logging aktivitas
-const ActivityLog = require("../models/ActivityLog");
+const ActivityLog = require("../models/ActivityLog"); // Mencatat jejak aktivitas pengguna
 // Import jsonwebtoken untuk verifikasi JWT token
-const jwt = require("jsonwebtoken");
+const jwt = require("jsonwebtoken"); // Digunakan pada getUserProfile untuk decode token
 // Import QR Code service untuk generate QR code pengesahan
-const QRCodeService = require("../services/qrCodeService");
+const QRCodeService = require("../services/qrCodeService"); // Generate checksum QR untuk SOP yang disahkan
 
 /**
  * Helper function untuk logging aktivitas document
@@ -18,38 +36,38 @@ const QRCodeService = require("../services/qrCodeService");
  * @param {Object} targetData - Data target (opsional)
  */
 const logDocumentActivity = async (
-  user,
-  action,
-  description,
-  req,
-  targetData = null
+  user, // Object user yang melakukan aksi (bisa dari req.user)
+  action, // String nama aksi (CREATE, UPDATE, DELETE/ARCHIVE, VIEW, dsb.)
+  description, // Deskripsi aktivitas yang human-readable
+  req, // Request object untuk mengambil IP, user-agent, dll.
+  targetData = null // Data target terkait aktivitas (mis. { id: <docId> })
 ) => {
   try {
-    // Pastikan semua parameter user ada, gunakan default jika undefined
-    // Jika user_id null, gunakan system user (ID 32) untuk foreign key constraint
-    const userId = user?.id || 32;
-    const userName = user?.name || user?.email || "Unknown User";
-    const userRole = user?.role || "user";
+    // Siapkan data user dengan fallback agar logging tetap jalan meski user tidak lengkap
+    const userId = user?.id || 32; // Fallback: 32 sebagai "system user" untuk menjaga foreign key
+    const userName = user?.name || user?.email || "Unknown User"; // Nama atau email, atau fallback
+    const userRole = user?.role || "user"; // Peran user, fallback ke 'user'
 
-    // Pastikan parameter lain juga tidak undefined
-    const actionStr = action || "UNKNOWN";
-    const descriptionStr = description || "No description";
+    // Normalisasi aksi dan deskripsi dengan default supaya tidak undefined
+    const actionStr = action || "UNKNOWN"; // Aksi default 'UNKNOWN'
+    const descriptionStr = description || "No description"; // Deskripsi default
 
+    // Tulis catatan aktivitas ke ActivityLog (audit trail)
     await ActivityLog.logUserActivity(
-      userId,
-      userName,
-      userRole,
-      actionStr,
-      "SOP_DOCUMENT",
-      descriptionStr,
-      req,
-      targetData?.id || null,
-      targetData ? "sop_document" : null
+      userId, // ID pengguna
+      userName, // Nama pengguna
+      userRole, // Role pengguna
+      actionStr, // Aksi dilakukan
+      "SOP_DOCUMENT", // Kategori/entitas
+      descriptionStr, // Deskripsi aktivitas
+      req, // Untuk metadata request (IP, agent)
+      targetData?.id || null, // ID target (jika ada)
+      targetData ? "sop_document" : null // Jenis target (opsional)
     );
   } catch (error) {
-    console.error("❌ Error logging document activity:", error.message);
-    console.error("Full error:", error);
-    // Tidak throw error agar tidak mengganggu flow utama
+    console.error("❌ Error logging document activity:", error.message); // Log error ringkas
+    console.error("Full error:", error); // Log error lengkap untuk debugging
+    // Jangan throw agar tidak mengganggu flow utama endpoint
   }
 };
 
@@ -60,17 +78,17 @@ const logDocumentActivity = async (
  */
 exports.getAllDocs = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : null;
-    const userRole = req.user ? req.user.role : null;
+    const userId = req.user ? req.user.id : null; // Ambil ID user dari auth middleware (jika ada)
+    const userRole = req.user ? req.user.role : null; // Ambil role user (jika ada)
 
     // Jika user tidak terautentikasi, hanya tampilkan published docs
     if (!userId) {
-      const publishedDocs = await SopDoc.findPublishedSopDocs();
-      return res.status(200).json(publishedDocs);
+      const publishedDocs = await SopDoc.findPublishedSopDocs(); // Ambil semua SOP berstatus published
+      return res.status(200).json(publishedDocs); // Kirim hanya yang published ke publik
     }
 
     // Ambil semua dokumen SOP dari database dengan filter berdasarkan permission
-    const docs = await SopDoc.findAllSopDocWithPermission(userId, userRole);
+    const docs = await SopDoc.findAllSopDocWithPermission(userId, userRole); // Query mempertimbangkan hak akses
 
     // Kirim response dengan status 200 dan data dokumen
     res.status(200).json(docs);
@@ -91,21 +109,21 @@ exports.getAllDocs = async (req, res) => {
 exports.getPublishedDocs = async (req, res) => {
   try {
     // Ambil dokumen SOP dengan status 'published' dari database
-    const allDocs = await SopDoc.findPublishedSopDocs();
+    const allDocs = await SopDoc.findPublishedSopDocs(); // Semua SOP published (tanpa filter visibilitas)
 
     // Aturan baru: halaman /sop hanya menampilkan dokumen yang dipublikasi untuk SEMUA ORANG (public_visibility = 'everyone').
     // Dokumen dengan visibility 'unit' tidak boleh tampil di sini meskipun user login.
     const filteredDocs = allDocs.filter((doc) => {
-      const visibility = doc.public_visibility || null;
+      const visibility = doc.public_visibility || null; // Ambil visibilitas publik jika ada
       if (visibility) {
-        return visibility === "everyone";
+        return visibility === "everyone"; // Hanya tampilkan yang untuk semua orang
       }
       // Fallback jika kolom belum ada: gunakan aturan lama berbasis ruang lingkup
       // unit_scope = 1 (Universitas) => treated as public/everyone
-      return Number(doc.unit_scope) === 1;
+      return Number(doc.unit_scope) === 1; // Anggap unit_scope=1 sebagai publik
     });
 
-    res.status(200).json(filteredDocs);
+    res.status(200).json(filteredDocs); // Kembalikan daftar yang telah difilter
   } catch (error) {
     // Handle error dan kirim response error
     res.status(500).json({ message: error.message });
@@ -120,7 +138,7 @@ exports.getPublishedDocs = async (req, res) => {
 exports.getPublishedSopContent = async (req, res) => {
   try {
     // Ambil dokumen berdasarkan ID dari parameter URL
-    const doc = await SopDoc.findById(req.params.id);
+    const doc = await SopDoc.findById(req.params.id); // Query detail SOP berdasarkan ID
 
     // Jika dokumen tidak ditemukan, kirim error 404
     if (!doc) {
@@ -135,12 +153,12 @@ exports.getPublishedSopContent = async (req, res) => {
     // - published & visibility = 'unit' => TIDAK boleh via public endpoint
     // - unpublished + approved => boleh untuk creator/admin/admin_unit (via token jika ada)
     if (doc.status !== "published") {
-      const role = req.user?.role;
-      const userId = req.user?.id;
-      const allowedRoles = ["admin", "admin_unit"];
+      const role = req.user?.role; // Peran user (jika ada token)
+      const userId = req.user?.id; // ID user (jika ada token)
+      const allowedRoles = ["admin", "admin_unit"]; // Peran yang diperbolehkan
       const isCreator =
-        userId && doc.creator_id && Number(doc.creator_id) === Number(userId);
-      const isAllowedRole = role && allowedRoles.includes(role);
+        userId && doc.creator_id && Number(doc.creator_id) === Number(userId); // Pengecekan pemilik/penyusun
+      const isAllowedRole = role && allowedRoles.includes(role); // Pengecekan role
 
       if (!(doc.review_status === "approved" && (isCreator || isAllowedRole))) {
         return res.status(403).json({
@@ -150,7 +168,7 @@ exports.getPublishedSopContent = async (req, res) => {
       }
     } else {
       // Published
-      const visibility = doc.public_visibility || null;
+      const visibility = doc.public_visibility || null; // Ambil visibilitas publik jika tersedia
       // Jika ada kolom visibility dan diset 'unit', blokir akses public endpoint
       if (visibility && visibility === "unit") {
         return res.status(403).json({
@@ -170,32 +188,36 @@ exports.getPublishedSopContent = async (req, res) => {
 
     // Kirim response sukses dengan data konten SOP
     const sopContent = {
-      id: doc.id,
-      sop_code: doc.sop_code,
-      sop_title: doc.title,
-      version: doc.version,
-      goals: doc.goals,
-      scope: doc.scope,
-      definition: doc.definition,
-      sop_reference: doc.sop_reference,
-      procedure_description: doc.procedure_description,
-      status: doc.status,
-      review_status: doc.review_status,
-      created_at: doc.created_at,
-      updated_at: doc.updated_at,
-      approval_date: doc.approval_date, // canonical
-      revision_date: doc.revision_date,
-      sop_applicable: doc.sop_applicable,
-      creator_name: doc.uploader_name,
-      unit_name: doc.unit_name,
-      reviewer_name: doc.reviewer_name,
-      approver_name: doc.approver_name,
-      approver_position: doc.approver_position,
-      organization: doc.organization,
-      unit_scope: doc.unit_scope,
-      unit_scope_name: doc.unit_scope_name,
-      public_visibility: doc.public_visibility,
-      qr_checksum: doc.qr_checksum,
+      id: doc.id, // ID dokumen SOP
+      sop_code: doc.sop_code, // Kode SOP
+      sop_title: doc.title, // Judul SOP
+      version: doc.version, // Versi dokumen
+      goals: doc.goals, // Tujuan
+      scope: doc.scope, // Ruang lingkup
+      definition: doc.definition, // Definisi
+      sop_reference: doc.sop_reference, // Referensi SOP
+      procedure_description: doc.procedure_description, // Deskripsi prosedur
+      status: doc.status, // Status dokumen (draft/published)
+      review_status: doc.review_status, // Status review
+      created_at: doc.created_at, // Tanggal dibuat
+      updated_at: doc.updated_at, // Tanggal diperbarui
+      approval_date: doc.approval_date, // Tanggal pengesahan (level dokumen)
+      // role-based approval timestamps for traceability
+      creator_approval_date: doc.creator_approval_date || null, // Waktu persetujuan penyusun
+      reviewer_approval_date: doc.reviewer_approval_date || null, // Waktu persetujuan pemeriksa
+      approver_approval_date: doc.approver_approval_date || null, // Waktu persetujuan pengesah
+      revision_date: doc.revision_date, // Tanggal revisi (jika ada)
+      sop_applicable: doc.sop_applicable, // Pihak yang terkait
+      creator_name: doc.uploader_name, // Nama penyusun/uploader
+      unit_name: doc.unit_name, // Nama unit
+      reviewer_name: doc.reviewer_name, // Nama pemeriksa
+      approver_name: doc.approver_name, // Nama pengesah
+      approver_position: doc.approver_position, // Jabatan pengesah
+      organization: doc.organization, // Organisasi
+      unit_scope: doc.unit_scope, // ID ruang lingkup unit
+      unit_scope_name: doc.unit_scope_name, // Nama ruang lingkup unit
+      public_visibility: doc.public_visibility, // Visibilitas publik: everyone/unit
+      qr_checksum: doc.qr_checksum, // Checksum QR jika tersedia
     };
 
     res.status(200).json({
@@ -219,7 +241,7 @@ exports.getPublishedSopContent = async (req, res) => {
 exports.getDocById = async (req, res) => {
   try {
     // Ambil dokumen berdasarkan ID dari parameter URL
-    const doc = await SopDoc.findById(req.params.id);
+    const doc = await SopDoc.findById(req.params.id); // Query SOP by ID
 
     // Jika dokumen tidak ditemukan, kirim error 404
     if (!doc) {
@@ -229,8 +251,13 @@ exports.getDocById = async (req, res) => {
     // Tidak ada logging di sini untuk menghindari duplikasi
     // Logging hanya dilakukan di endpoint khusus /view/:id
 
-    // Kirim response sukses dengan data dokumen
-    res.status(200).json(doc);
+    // Kirim response sukses dengan data dokumen (termasuk role-based approval dates bila ada)
+    res.status(200).json({
+      ...doc,
+      creator_approval_date: doc.creator_approval_date || null,
+      reviewer_approval_date: doc.reviewer_approval_date || null,
+      approver_approval_date: doc.approver_approval_date || null,
+    });
   } catch (error) {
     // Handle error dan kirim response error
     res.status(500).json({ message: error.message });
@@ -245,13 +272,13 @@ exports.getDocById = async (req, res) => {
 exports.getUserProfile = async (req, res) => {
   try {
     // Ekstrak token dari Authorization header
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "No token provided" });
+    const token = req.headers.authorization?.split(" ")[1]; // Ambil token setelah "Bearer "
+    if (!token) return res.status(401).json({ message: "No token provided" }); // Jika tidak ada token
 
     // Verifikasi dan decode token JWT untuk mendapatkan data user
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET); // Decode dan validasi JWT
     // Buat object user berdasarkan data dari token
-    const user = { id: decoded.id, email: decoded.email, registered: true };
+    const user = { id: decoded.id, email: decoded.email, registered: true }; // Bentuk profil sederhana
 
     // Kirim response sukses dengan data user
     res.status(200).json(user);
@@ -271,13 +298,13 @@ exports.createDoc = async (req, res) => {
     // Gabungkan data dari request body dengan user_id dan versioning info
     const sopData = {
       ...req.body,
-      user_id: req.user.id,
+      user_id: req.user.id, // Simpan pemilik/penyusun dokumen
       version_mode: req.body.version_mode, // 'auto' atau 'manual'
       version_type: req.body.version_type, // 'minor' atau 'major' jika auto
     };
 
     // Simpan dokumen SOP baru ke database (dengan versioning logic)
-    const newDoc = await SopDoc.createSopDoc(sopData);
+    const newDoc = await SopDoc.createSopDoc(sopData); // Insert ke DB sesuai logic versi
 
     // Log aktivitas pembuatan dokumen
     await logDocumentActivity(
@@ -308,7 +335,7 @@ exports.createDoc = async (req, res) => {
 exports.updateDoc = async (req, res) => {
   try {
     // Ambil data dokumen sebelum update untuk logging
-    const oldDoc = await SopDoc.findById(req.params.id);
+    const oldDoc = await SopDoc.findById(req.params.id); // Snapshot sebelum update
 
     // Gabungkan versioning info jika ada
     const sopData = {
@@ -318,7 +345,7 @@ exports.updateDoc = async (req, res) => {
     };
 
     // Update dokumen berdasarkan ID dengan data baru (dengan versioning logic)
-    const updatedDoc = await SopDoc.updateSopDoc(req.params.id, sopData);
+    const updatedDoc = await SopDoc.updateSopDoc(req.params.id, sopData); // Update DB dengan aturan versi
 
     // Log aktivitas update dokumen
     await logDocumentActivity(
@@ -350,7 +377,7 @@ exports.updateDoc = async (req, res) => {
 exports.publishDoc = async (req, res) => {
   try {
     // Ambil data dokumen sebelum publish untuk logging
-    const doc = await SopDoc.findById(req.params.id);
+    const doc = await SopDoc.findById(req.params.id); // Ambil SOP yang akan dipublish
 
     if (!doc) {
       return res.status(404).json({ message: "SOP document not found" });
@@ -358,11 +385,11 @@ exports.publishDoc = async (req, res) => {
 
     // Cek aturan akses publikasi: hanya admin_unit yang bisa publikasi,
     // kecuali untuk SOP unit universitas langlangbuana
-    const userRole = req.user.role;
-    const userId = req.user.id;
+    const userRole = req.user.role; // Role user yang login
+    const userId = req.user.id; // ID user yang login
 
     // Ambil data unit dari SOP dan user
-    const pool = require("../config/db");
+    const pool = require("../config/db"); // Koneksi pool database
     const [unitData] = await pool.query(
       `
       SELECT 
@@ -381,7 +408,7 @@ exports.publishDoc = async (req, res) => {
       return res.status(404).json({ message: "Data unit tidak ditemukan" });
     }
 
-    const { sop_unit_name, user_unit_name } = unitData[0];
+    const { sop_unit_name, user_unit_name } = unitData[0]; // Nama unit SOP dan unit user
 
     // Aturan akses publikasi:
     // 1. admin hanya bisa publikasi SOP dengan ruang lingkup "Universitas Langlangbuana"
@@ -413,13 +440,13 @@ exports.publishDoc = async (req, res) => {
     }
 
     // Ubah status dokumen menjadi 'published'
-    await SopDoc.publishSopDoc(req.params.id);
+    await SopDoc.publishSopDoc(req.params.id); // Update status ke published
 
     // Simpan pilihan visibilitas jika dikirim dari frontend
-    const visibility = req.body?.public_visibility;
+    const visibility = req.body?.public_visibility; // everyone | unit (opsional dari frontend)
     if (visibility === "everyone" || visibility === "unit") {
       try {
-        const pool = require("../config/db");
+        const pool = require("../config/db"); // Reuse koneksi DB
         await pool.query(
           "UPDATE sop_documents SET public_visibility = ? WHERE id = ?",
           [visibility, req.params.id]
@@ -435,7 +462,7 @@ exports.publishDoc = async (req, res) => {
 
     // Pastikan checksum QR untuk bukti pengesahan SOP tersedia (tanpa menyimpan gambar base64 ke DB)
     try {
-      const pool = require("../config/db");
+      const pool = require("../config/db"); // Pool DB untuk operasi cepat
       // Cek apakah qr_checksum sudah ada
       const [qrRows] = await pool.execute(
         "SELECT qr_checksum FROM sop_documents WHERE id = ?",
@@ -464,7 +491,7 @@ exports.publishDoc = async (req, res) => {
     }
 
     // Ambil data dokumen yang sudah dipublikasi
-    const updatedDoc = await SopDoc.findById(req.params.id);
+    const updatedDoc = await SopDoc.findById(req.params.id); // Refresh data terbaru
 
     // Log aktivitas publish dokumen
     await logDocumentActivity(
@@ -476,6 +503,34 @@ exports.publishDoc = async (req, res) => {
       req,
       { id: req.params.id }
     );
+
+    // Kirim email publish (tanpa in-app) - best-effort
+    try {
+      const { sendSopPublishedEmail } = require("../config/emailService");
+      const vis =
+        req.body?.public_visibility || updatedDoc?.public_visibility || null; // Tentukan visibilitas final
+      const title = updatedDoc?.title || updatedDoc?.sop_title || "SOP"; // Judul untuk email
+      const pool = require("../config/db"); // DB untuk ambil penerima
+      const [stakeRows] = await pool.query(
+        `SELECT u.email FROM sop_approval_roles ar JOIN users u ON ar.user_id = u.id
+         WHERE ar.sop_doc_id = ? AND ar.role IN ('Creator','Reviewer','Approver')`,
+        [updatedDoc.id]
+      );
+      const recipients = stakeRows.map((r) => r.email).filter(Boolean); // Ambil email unik
+      if (recipients.length) {
+        await sendSopPublishedEmail({
+          recipients,
+          docTitle: title,
+          sopCode: updatedDoc?.sop_code,
+          version: updatedDoc?.version,
+          unitScopeName: unitData[0]?.sop_unit_name,
+          visibility: vis || undefined,
+          frontendUrl: process.env.FRONTEND_URL,
+        });
+      }
+    } catch (e) {
+      // abaikan error email
+    }
 
     // Kirim response sukses agar frontend bisa menutup modal dan refresh daftar
     return res.status(200).json({
@@ -499,13 +554,13 @@ exports.publishDoc = async (req, res) => {
 exports.unpublishDoc = async (req, res) => {
   try {
     // Ambil data dokumen sebelum unpublish untuk logging
-    const doc = await SopDoc.findById(req.params.id);
+    const doc = await SopDoc.findById(req.params.id); // SOP target unpublish
 
     // Ubah status dokumen menjadi 'draft'
-    await SopDoc.unpublishSopDoc(req.params.id);
+    await SopDoc.unpublishSopDoc(req.params.id); // Set kembali ke draft
 
     // Ambil data dokumen yang sudah di-unpublish
-    const updatedDoc = await SopDoc.findById(req.params.id);
+    const updatedDoc = await SopDoc.findById(req.params.id); // Refresh data terbaru
 
     // Log aktivitas unpublish dokumen
     await logDocumentActivity(
@@ -539,7 +594,7 @@ exports.unpublishDoc = async (req, res) => {
 exports.deleteDoc = async (req, res) => {
   try {
     // Ambil dokumen terlebih dahulu untuk cek apakah ada URL file
-    const doc = await SopDoc.findById(req.params.id);
+    const doc = await SopDoc.findById(req.params.id); // Dapatkan dokumen sebelum pindah ke arsip
     if (!doc) {
       return res.status(404).json({ message: "Document not found" });
     }
@@ -547,7 +602,7 @@ exports.deleteDoc = async (req, res) => {
     // Pindahkan dokumen ke arsip (move dari sop_documents ke sop_archive)
     let archiveResult = null;
     try {
-      const SopArchive = require("../models/SopArchive");
+      const SopArchive = require("../models/SopArchive"); // Lazy require untuk konsistensi
       archiveResult = await SopArchive.moveToArchiveOnDelete(
         doc,
         req.user.id,
@@ -598,13 +653,13 @@ exports.deleteDoc = async (req, res) => {
  */
 exports.viewDoc = async (req, res) => {
   try {
-    const doc = await SopDoc.findById(req.params.id);
+    const doc = await SopDoc.findById(req.params.id); // Dapatkan SOP untuk ditampilkan
     if (!doc) {
       return res.status(404).json({ message: "SOP document not found" });
     }
 
     // cek apakah user login = penyusun
-    const isOwner = req.user && doc.user_id === req.user.id;
+    const isOwner = req.user && doc.user_id === req.user.id; // Flag pemilik dokumen
 
     // Log aktivitas: hanya tampilkan keterangan judul SOP dan kode SOP
     const logTitle = doc.title || doc.sop_title || "(tanpa judul)";
@@ -634,10 +689,10 @@ exports.viewDoc = async (req, res) => {
 exports.getSopByUserUnit = async (req, res) => {
   try {
     // Ambil user_id dari JWT token yang sudah di-decode di middleware
-    const userId = req.user.id;
+    const userId = req.user.id; // ID user dari middleware auth
 
     // Ambil SOP berdasarkan unit kerja user
-    const sopDocuments = await SopDoc.findByUserUnit(userId);
+    const sopDocuments = await SopDoc.findByUserUnit(userId); // Query SOP sesuai unit user
 
     // Kirim response sukses dengan data SOP
     res.status(200).json({
@@ -663,7 +718,7 @@ exports.getSopByUserUnit = async (req, res) => {
 exports.getSopByUnit = async (req, res) => {
   try {
     // Ambil unit_id dari parameter URL
-    const { unit_id } = req.params;
+    const { unit_id } = req.params; // unit ID dari route param
 
     // Validasi unit_id
     if (!unit_id) {
@@ -673,7 +728,7 @@ exports.getSopByUnit = async (req, res) => {
     }
 
     // Ambil SOP berdasarkan unit
-    const sopDocuments = await SopDoc.findByUnit(unit_id);
+    const sopDocuments = await SopDoc.findByUnit(unit_id); // Query SOP by unit ID
 
     // Kirim response sukses dengan data SOP
     res.status(200).json({
@@ -699,7 +754,7 @@ exports.getSopByUnit = async (req, res) => {
 exports.getSopByUnitName = async (req, res) => {
   try {
     // Ambil unit_name dari parameter URL
-    const { unit_name } = req.params;
+    const { unit_name } = req.params; // Nama unit dari route param
 
     // Validasi unit_name
     if (!unit_name) {
@@ -709,7 +764,7 @@ exports.getSopByUnitName = async (req, res) => {
     }
 
     // Ambil SOP berdasarkan nama unit
-    const sopDocuments = await SopDoc.findByUnitName(unit_name);
+    const sopDocuments = await SopDoc.findByUnitName(unit_name); // Query SOP by unit name
 
     // Kirim response sukses dengan data SOP
     res.status(200).json({
@@ -734,8 +789,11 @@ exports.getSopByUnitName = async (req, res) => {
  */
 exports.submitSopForReview = async (req, res) => {
   try {
-    const { id } = req.params;
-    const pool = require("../config/db");
+    const { id } = req.params; // ID SOP dari URL
+    const pool = require("../config/db"); // Pool koneksi DB
+    const {
+      sendSopWorkflowNotificationEmail,
+    } = require("../config/emailService"); // Service email untuk notifikasi workflow
 
     // Validasi apakah SOP ada dan milik user yang login
     const [sopRows] = await pool.query(
@@ -749,7 +807,7 @@ exports.submitSopForReview = async (req, res) => {
       });
     }
 
-    const sopDoc = sopRows[0];
+    const sopDoc = sopRows[0]; // Data SOP minimal untuk logging
 
     // Cek apakah sudah ada reviewer dan approver yang dipilih
     const [approvalRoles] = await pool.query(
@@ -757,8 +815,8 @@ exports.submitSopForReview = async (req, res) => {
       [id]
     );
 
-    const hasReviewer = approvalRoles.some((role) => role.role === "Reviewer");
-    const hasApprover = approvalRoles.some((role) => role.role === "Approver");
+    const hasReviewer = approvalRoles.some((role) => role.role === "Reviewer"); // Apakah reviewer sudah ditetapkan
+    const hasApprover = approvalRoles.some((role) => role.role === "Approver"); // Apakah approver sudah ditetapkan
 
     if (!hasReviewer || !hasApprover) {
       return res.status(400).json({
@@ -786,6 +844,47 @@ exports.submitSopForReview = async (req, res) => {
       { id: id }
     );
 
+    // Ambil data untuk notifikasi reviewer
+    try {
+      const [docRows] = await pool.query(
+        `SELECT d.title, d.sop_code, d.version,
+                COALESCE(d.unit_scope, sca.unit_scope) AS unit_scope_id,
+                u.nama_unit AS unit_scope_name
+         FROM sop_documents d
+         LEFT JOIN sop_creator_assignments sca ON d.assignment_id = sca.id
+         LEFT JOIN units u ON COALESCE(d.unit_scope, sca.unit_scope) = u.id
+         WHERE d.id = ?`,
+        [id]
+      );
+      const meta = docRows && docRows[0] ? docRows[0] : {}; // Metadata SOP untuk email
+      // Ambil reviewer
+      const [reviewerRows] = await pool.query(
+        `SELECT u.id, u.name, u.email
+         FROM sop_approval_roles ar
+         JOIN users u ON ar.user_id = u.id
+         WHERE ar.sop_doc_id = ? AND ar.role = 'Reviewer' LIMIT 1`,
+        [id]
+      );
+      const reviewer = reviewerRows && reviewerRows[0] ? reviewerRows[0] : null; // Reviewer aktif
+      if (reviewer && reviewer.email) {
+        // Kirim email notifikasi ke reviewer
+        await sendSopWorkflowNotificationEmail({
+          to: reviewer.email,
+          userName: reviewer.name,
+          eventType: "submitted_for_review",
+          docTitle: meta.title,
+          sopCode: meta.sop_code,
+          version: meta.version,
+          unitScopeName: meta.unit_scope_name,
+          requesterName: req.user?.name,
+          frontendUrl: process.env.FRONTEND_URL,
+        });
+        // In-app notification removed
+      }
+    } catch (e) {
+      // best-effort only; ignore errors
+    }
+
     res.status(200).json({
       message: "SOP berhasil diajukan untuk pemeriksaan",
       sop_doc_id: id,
@@ -808,7 +907,7 @@ exports.submitSopForReview = async (req, res) => {
 exports.getSopContent = async (req, res) => {
   try {
     // Ambil dokumen berdasarkan ID dari parameter URL
-    const doc = await SopDoc.findById(req.params.id);
+    const doc = await SopDoc.findById(req.params.id); // Dapatkan detail SOP lengkap
 
     // Jika dokumen tidak ditemukan, kirim error 404
     if (!doc) {
@@ -828,35 +927,35 @@ exports.getSopContent = async (req, res) => {
 
     // Kirim response sukses dengan data dokumen tanpa URL
     const sopContent = {
-      id: doc.id,
-      sop_code: doc.sop_code,
+      id: doc.id, // ID SOP
+      sop_code: doc.sop_code, // Kode SOP
       sop_title: doc.title, // Gunakan field 'title' dari database
-      version: doc.version,
-      goals: doc.goals,
-      scope: doc.scope,
-      definition: doc.definition,
-      sop_reference: doc.sop_reference,
-      procedure_description: doc.procedure_description,
-      status: doc.status,
-      review_status: doc.review_status,
-      created_at: doc.created_at,
-      updated_at: doc.updated_at,
-      approval_date: doc.approval_date,
-      revision_date: doc.revision_date,
-      sop_applicable: doc.sop_applicable,
-      creator_name: doc.uploader_name, // Gunakan field yang benar dari query
-      unit_name: doc.unit_name,
-      unit_scope_name: doc.unit_scope_name,
-      reviewer_name: doc.reviewer_name,
-      approver_name: doc.approver_name,
-      approver_position: doc.approver_position,
-      reviewer_id: doc.reviewer_id,
-      approver_id: doc.approver_id,
-      organization: doc.organization,
-      assignment_id: doc.assignment_id,
-      unit_scope: doc.unit_scope,
-      qr_checksum: doc.qr_checksum,
-      public_visibility: doc.public_visibility,
+      version: doc.version, // Versi dokumen
+      goals: doc.goals, // Tujuan
+      scope: doc.scope, // Ruang lingkup
+      definition: doc.definition, // Definisi
+      sop_reference: doc.sop_reference, // Referensi
+      procedure_description: doc.procedure_description, // Deskripsi prosedur
+      status: doc.status, // Status (draft/published)
+      review_status: doc.review_status, // Status review
+      created_at: doc.created_at, // Tanggal dibuat
+      updated_at: doc.updated_at, // Tanggal diperbarui
+      approval_date: doc.approval_date, // Tanggal pengesahan
+      revision_date: doc.revision_date, // Tanggal revisi (jika ada)
+      sop_applicable: doc.sop_applicable, // Pihak terkait
+      creator_name: doc.uploader_name, // Nama penyusun/uploader dari join query
+      unit_name: doc.unit_name, // Nama unit
+      unit_scope_name: doc.unit_scope_name, // Nama ruang lingkup unit
+      reviewer_name: doc.reviewer_name, // Nama reviewer
+      approver_name: doc.approver_name, // Nama approver
+      approver_position: doc.approver_position, // Jabatan approver
+      reviewer_id: doc.reviewer_id, // ID reviewer
+      approver_id: doc.approver_id, // ID approver
+      organization: doc.organization, // Organisasi
+      assignment_id: doc.assignment_id, // ID assignment penyusunan
+      unit_scope: doc.unit_scope, // ID ruang lingkup unit
+      qr_checksum: doc.qr_checksum, // Checksum QR jika ada
+      public_visibility: doc.public_visibility, // Visibilitas publik (jika diset)
     };
 
     res.status(200).json({
@@ -881,10 +980,10 @@ exports.getSopContent = async (req, res) => {
  */
 exports.validateBeforeSubmit = async (req, res) => {
   try {
-    const sopId = req.params.id;
+    const sopId = req.params.id; // ID SOP dari URL
 
     // Ambil data SOP lengkap
-    const sop = await SopDoc.findById(sopId);
+    const sop = await SopDoc.findById(sopId); // Dapatkan data dokumen lengkap
     if (!sop) {
       return res.status(404).json({
         isValid: false,
@@ -892,18 +991,18 @@ exports.validateBeforeSubmit = async (req, res) => {
       });
     }
 
-    const missingFields = [];
-    let isValid = true;
+    const missingFields = []; // Menampung field yang belum lengkap
+    let isValid = true; // Status validasi keseluruhan
 
     // Siapkan fallback dari assignment untuk reviewer/approver/unit_scope
-    const pool = require("../config/db");
-    let assignment = null;
+    const pool = require("../config/db"); // Pool DB
+    let assignment = null; // Fallback assignment (jika ada)
     if (sop.assignment_id) {
       const [assignRows] = await pool.query(
         `SELECT reviewer_id, approver_id, unit_scope FROM sop_creator_assignments WHERE id = ?`,
         [sop.assignment_id]
       );
-      assignment = assignRows[0] || null;
+      assignment = assignRows[0] || null; // Ambil assignment terkait SOP
     }
 
     // Validasi field wajib SOP
@@ -912,7 +1011,7 @@ exports.validateBeforeSubmit = async (req, res) => {
       isValid = false;
     }
 
-    const effectiveUnitScope = sop.unit_scope || assignment?.unit_scope;
+    const effectiveUnitScope = sop.unit_scope || assignment?.unit_scope; // Gunakan unit_scope dari SOP, fallback ke assignment
     if (!effectiveUnitScope) {
       missingFields.push("Ruang Lingkup Unit Kerja");
       isValid = false;
@@ -936,13 +1035,13 @@ exports.validateBeforeSubmit = async (req, res) => {
     }
 
     // Validasi pemeriksa dan pengesah
-    const effectiveReviewerId = sop.reviewer_id || assignment?.reviewer_id;
+    const effectiveReviewerId = sop.reviewer_id || assignment?.reviewer_id; // Fallback ke assignment jika reviewer_id kosong
     if (!effectiveReviewerId) {
       missingFields.push("Pemeriksa");
       isValid = false;
     }
 
-    const effectiveApproverId = sop.approver_id || assignment?.approver_id;
+    const effectiveApproverId = sop.approver_id || assignment?.approver_id; // Fallback approver dari assignment
     if (!effectiveApproverId) {
       missingFields.push("Pengesah");
       isValid = false;
@@ -962,7 +1061,7 @@ exports.validateBeforeSubmit = async (req, res) => {
       isValid = false;
     } else {
       // 2. Cek setiap activity harus ada visualisasinya yang lengkap
-      let incompleteActivities = [];
+      let incompleteActivities = []; // Menampung activity yang belum lengkap
 
       for (const activity of activities) {
         const [visualization] = await pool.query(
@@ -1021,7 +1120,7 @@ exports.validateBeforeSubmit = async (req, res) => {
       visualizationFields.includes(field)
     );
 
-    let message = "SOP siap untuk diajukan";
+    let message = "SOP siap untuk diajukan"; // Pesan default jika valid
     if (!isValid) {
       const messages = [];
       if (missingDocumentFields.length > 0) {

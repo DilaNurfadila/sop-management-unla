@@ -1,3 +1,10 @@
+/**
+ * Component: ProtectedRoute
+ *
+ * Membatasi akses route berdasarkan autentikasi/role.
+ * Props umum: { roles?: string[] }
+ * Perilaku: redirect ke login jika tidak terautentik, atau ke dashboard jika role tidak sesuai.
+ */
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils.jsx";

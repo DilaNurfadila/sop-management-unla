@@ -1,3 +1,8 @@
+/**
+ * Utils: dateFormatter
+ *
+ * Format tanggal/waktu untuk tampilan UI (ID locale), parsing, dan helper terkait.
+ */
 // Import function format dan parseISO dari date-fns untuk formatting tanggal
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 // Import locale Indonesia untuk formatting dalam bahasa Indonesia

@@ -1,3 +1,10 @@
+/**
+ * Hook: useAdminRole
+ *
+ * Mengembalikan boolean apakah user saat ini memiliki role admin.
+ * Kontrak: () => boolean
+ * Catatan: bergantung pada state auth yang disimpan (local storage/cookie via authClient).
+ */
 import { getSafeUserDataNoRedirect } from "../utils/cryptoUtils";
 
 /**

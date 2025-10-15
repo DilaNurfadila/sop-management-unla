@@ -1,3 +1,11 @@
+/**
+ * Model: SopCreatorAssignment
+ *
+ * Mencatat penugasan pembuat/penyusun SOP (creator) ke dokumen SOP tertentu.
+ *
+ * Catatan:
+ * - Dimanfaatkan oleh sopCreatorController untuk alur penugasan.
+ */
 // Import konfigurasi database connection pool
 const pool = require("../config/db");
 

@@ -1,4 +1,12 @@
 /**
+ * Constants: SOP Status & Review Status
+ *
+ * Referensi enum untuk status dokumen SOP, status review, dan tipe versioning.
+ * Tujuan:
+ * - Satu sumber kebenaran untuk nilai status agar konsisten di seluruh kode.
+ * - Menghindari typo pada string literal (gunakan import STATUS/REVIEW_STATUS/VERSION_TYPE).
+ */
+/**
  * SOP STATUS & REVIEW STATUS REFERENCE
  *
  * STATUS VALUES:

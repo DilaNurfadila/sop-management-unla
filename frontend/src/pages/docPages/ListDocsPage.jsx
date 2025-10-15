@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { submitSopForReview } from "../../services/apiPdf";
 import { getSopByUserUnit, getDocs } from "../../services/api";
+import { forceLogout } from "../../services/authClient";
 import api from "../../services/api";
 import { archiveSopDocument } from "../../services/archiveApi.jsx";
 import Notification from "../../components/Notification";
@@ -19,6 +20,7 @@ import {
   FiSend,
   FiArrowDown,
   FiArchive,
+  FiInfo,
 } from "react-icons/fi";
 import { getSafeUserDataNoRedirect } from "../../utils/cryptoUtils";
 import { dateFormatter } from "../../utils/dateFormatter";
@@ -44,9 +46,14 @@ const ListDocsPage = () => {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [selectedDocumentForPublish, setSelectedDocumentForPublish] =
     useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailData, setDetailData] = useState(null);
+  const [detailError, setDetailError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [unitFilter, setUnitFilter] = useState("ALL"); // "ALL" | unit name
   const [statusFilter, setStatusFilter] = useState("ALL"); // "ALL" | "draft" | "unpublished" | "published"
+  // Riwayat revisi dipindahkan: fitur dihapus dari halaman ini
 
   // Get user data untuk cek role dan ID
   const userData = getSafeUserDataNoRedirect();
@@ -183,8 +190,15 @@ const ListDocsPage = () => {
       setPdfFiles(filteredData);
     } catch (error) {
       console.error("❌ Error fetching SOP files:", error);
-      setError("Gagal memuat daftar dokumen SOP untuk unit kerja Anda.");
+      const msg =
+        error?.message ||
+        "Gagal memuat daftar dokumen SOP untuk unit kerja Anda.";
+      setError(msg);
       setPdfFiles([]);
+      if (/akses ditolak|unauthorized|token|sesi berakhir/i.test(msg)) {
+        await forceLogout();
+        return;
+      }
     } finally {
       setLoading(false);
     }
@@ -227,8 +241,15 @@ const ListDocsPage = () => {
         setPdfFiles(filteredData);
       } catch (error) {
         console.error("❌ Error fetching SOP files:", error);
-        setError("Gagal memuat daftar dokumen SOP untuk unit kerja Anda.");
+        const msg =
+          error?.message ||
+          "Gagal memuat daftar dokumen SOP untuk unit kerja Anda.";
+        setError(msg);
         setPdfFiles([]);
+        if (/akses ditolak|unauthorized|token|sesi berakhir/i.test(msg)) {
+          await forceLogout();
+          return;
+        }
       } finally {
         setLoading(false);
       }
@@ -275,11 +296,44 @@ const ListDocsPage = () => {
     await fetchRevisionNotes(document.id);
   };
 
+  const handleOpenSopDetail = async (file) => {
+    try {
+      setDetailError("");
+      setDetailData(null);
+      setShowDetailModal(true);
+      setDetailLoading(true);
+      const resp = await api.get(`/docs/${file.id}`);
+      const data = resp?.data || {};
+      setDetailData(data);
+    } catch (e) {
+      console.error("Gagal memuat detail SOP:", e);
+      const msg =
+        e?.response?.data?.message || "Gagal memuat detail SOP. Coba lagi.";
+      setDetailError(msg);
+      // Jika unauthorized, paksa logout agar konsisten dengan alur global
+      const status = e?.response?.status;
+      if (status === 401 || /unauthorized|token|sesi berakhir/i.test(msg)) {
+        await forceLogout();
+        return;
+      }
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleCloseSopDetail = () => {
+    setShowDetailModal(false);
+    setDetailData(null);
+    setDetailError("");
+  };
+
+  // Hapus handler riwayat revisi
+
   const handleSubmitForReview = async (fileId) => {
     try {
       setLoadingStates((prev) => ({
         ...prev,
-        [`submit_review_${fileId}`]: true,
+        [`submit_${fileId}`]: true,
       }));
       const checkResponse = await api.get(
         `/docs/validate-before-submit/${fileId}`
@@ -308,7 +362,7 @@ const ListDocsPage = () => {
     } finally {
       setLoadingStates((prev) => ({
         ...prev,
-        [`submit_review_${fileId}`]: false,
+        [`submit_${fileId}`]: false,
       }));
     }
   };
@@ -553,14 +607,10 @@ const ListDocsPage = () => {
             {isSuperadmin ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Status Admin</p>
-                  <p className="font-medium text-green-600">
-                    Superadministrator Universitas
+                  <p className="text-sm text-gray-600 mb-1">Institusi</p>
+                  <p className="font-medium text-gray-900">
+                    {pdfFiles[0]?.organization || "Universitas Langlangbuana"}
                   </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Akses</p>
-                  <p className="font-medium text-gray-900">Semua Unit Kerja</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Total SOP</p>
@@ -572,14 +622,10 @@ const ListDocsPage = () => {
             ) : isAdmin ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Status Admin</p>
-                  <p className="font-medium text-green-600">
-                    Administrator Universitas
+                  <p className="text-sm text-gray-600 mb-1">Institusi</p>
+                  <p className="font-medium text-gray-900">
+                    {pdfFiles[0]?.organization || "Universitas Langlangbuana"}
                   </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Akses</p>
-                  <p className="font-medium text-gray-900">Semua Unit Kerja</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Total SOP</p>
@@ -591,19 +637,13 @@ const ListDocsPage = () => {
             ) : isAdminUnit ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Status Admin</p>
-                  <p className="font-medium text-orange-600">
-                    Administrator Unit
-                  </p>
-                </div>
-                <div>
                   <p className="text-sm text-gray-600 mb-1">Unit Kerja</p>
                   <p className="font-medium text-gray-900">
                     {pdfFiles[0]?.organization || "Universitas Langlangbuana"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Total SOP Unit</p>
+                  <p className="text-sm text-gray-600 mb-1">Total SOP</p>
                   <p className="font-medium text-blue-600 text-lg">
                     {pdfFiles.length} dokumen
                   </p>
@@ -819,6 +859,13 @@ const ListDocsPage = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
+                          {/* Detail SOP Button */}
+                          <button
+                            onClick={() => handleOpenSopDetail(file)}
+                            className="text-gray-700 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-50"
+                            title="Detail SOP">
+                            <FiInfo />
+                          </button>
                           {/* View Button - selalu tampil */}
                           <button
                             onClick={() => navigate(`/sop/view/${file.id}`)}
@@ -826,6 +873,8 @@ const ListDocsPage = () => {
                             title="Lihat Dokumen">
                             <FiEye />
                           </button>
+
+                          {/* Riwayat Revisi dihapus dari halaman ini */}
 
                           {/* Revision Notes Button - hanya untuk penyusun ketika perlu revisi */}
                           {file.review_status === "needs_revision" &&
@@ -1082,6 +1131,122 @@ const ListDocsPage = () => {
           onConfirm={handlePublishConfirm}
           isLoading={loadingStates[`publish_${selectedDocumentForPublish?.id}`]}
         />
+
+        {/* Detail SOP Modal */}
+        {showDetailModal && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white">
+              <div className="mt-1">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Detail SOP
+                  </h3>
+                  <button
+                    onClick={handleCloseSopDetail}
+                    className="text-gray-400 hover:text-gray-600 p-1">
+                    <FiX size={20} />
+                  </button>
+                </div>
+
+                {detailLoading ? (
+                  <div className="flex justify-center items-center py-10">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-gray-600">Memuat detail...</span>
+                  </div>
+                ) : detailError ? (
+                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">
+                    {detailError}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-600">Penyusun</p>
+                      <p className="font-medium text-gray-900">
+                        {detailData?.creator_name ||
+                          detailData?.uploader_name ||
+                          "Tidak tersedia"}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-600">Pemeriksa</p>
+                      <p className="font-medium text-gray-900">
+                        {detailData?.reviewer_name || "Tidak tersedia"}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-600">Pengesah</p>
+                      <p className="font-medium text-gray-900">
+                        {detailData?.approver_name || "Tidak tersedia"}
+                        {detailData?.approver_position ? (
+                          <span className="text-sm text-gray-500">
+                            {" "}
+                            {`(${detailData.approver_position})`}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-600">
+                        Tanggal Penyusunan
+                      </p>
+                      <p className="font-medium text-gray-900">
+                        {detailData?.created_at
+                          ? dateFormatter(detailData.created_at)
+                          : "Tidak tersedia"}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-600">
+                        Tanggal Pemeriksaan
+                      </p>
+                      <p className="font-medium text-gray-900">
+                        {detailData?.reviewer_approval_date
+                          ? dateFormatter(detailData?.reviewer_approval_date)
+                          : "Tidak tersedia"}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm text-gray-600">
+                        Tanggal Pengesahan
+                      </p>
+                      <p className="font-medium text-gray-900">
+                        {detailData?.approver_approval_date ||
+                        detailData?.approval_date
+                          ? dateFormatter(
+                              detailData?.approver_approval_date ||
+                                detailData?.approval_date
+                            )
+                          : "Tidak tersedia"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between mt-6">
+                  <button
+                    onClick={() => {
+                      const id = detailData?.id;
+                      if (id) {
+                        navigate(`/sop/view/${id}`);
+                        setShowDetailModal(false);
+                      }
+                    }}
+                    disabled={detailLoading || !!detailError || !detailData?.id}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    Lihat SOP
+                  </button>
+                  <button
+                    onClick={handleCloseSopDetail}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors">
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Riwayat Revisi dihapus */}
       </div>
     </div>
   );
